@@ -46,18 +46,26 @@ async function initDB() {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         latitude DECIMAL(10, 8),
         longitude DECIMAL(11, 8),
-        photo_base64 MEDIUMTEXT,
+        photo_url VARCHAR(512),
         FOREIGN KEY (nim) REFERENCES users(nim) ON DELETE CASCADE
       )
     `);
 
-    // Alter table to add the new enums safely if the table already existed with only 'in', 'out'
+    // Alter existing tables safely to add new columns / modify enums
     try {
        await connection.query(`
          ALTER TABLE attendance MODIFY COLUMN type ENUM('in', 'out', 'meet-in', 'meet-out') NOT NULL;
        `);
     } catch(alterErr) {
-       console.log("Note: Could not alter attendance enum, it may already be correct or table does not exist yet.");
+       console.log("Note: Could not alter attendance enum.");
+    }
+
+    // Migrate: add photo_url if table already exists with photo_base64
+    try {
+       await connection.query(`ALTER TABLE attendance ADD COLUMN photo_url VARCHAR(512) AFTER longitude`);
+       console.log('✅ Migration: Added photo_url column.');
+    } catch(alterErr) {
+       // Column might already exist; that's fine
     }
 
     console.log('✅ Database initialized: users and attendance tables are ready.');

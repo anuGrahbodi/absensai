@@ -714,8 +714,8 @@ export default function Attendance() {
                       return (
                          <div key={record.id} className="flex flex-col sm:flex-row gap-4 p-4 border rounded-lg bg-surface items-center sm:items-start shadow-sm">
                             <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0 border border-color bg-slate-100 relative">
-                               {record.photo_base64 ? (
-                                 <img src={record.photo_base64} alt="Snapshot" className="w-full h-full object-cover" />
+                               {record.photo_url ? (
+                                 <img src={record.photo_url} alt="Snapshot" className="w-full h-full object-cover" />
                                ) : (
                                  <div className="w-full h-full flex items-center justify-center text-secondary">
                                    <User size={24} />

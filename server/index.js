@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const { uploadPhoto } = require('./cloudinary');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -68,24 +69,35 @@ app.post('/api/register', async (req, res) => {
 
 /**
  * POST /api/attendance
- * Records a check-in or check-out event
+ * Records a check-in or check-out event.
+ * Photo is uploaded to Cloudinary; only the URL is stored in MySQL.
  */
 app.post('/api/attendance', async (req, res) => {
   const { nim, type, latitude, longitude, photo_base64 } = req.body;
 
-  if (!nim || !type || !latitude || !longitude || !photo_base64) {
+  if (!nim || !type || latitude === undefined || longitude === undefined || !photo_base64) {
     return res.status(400).json({ error: 'Semua data (nim, type, latitude, longitude, photo_base64) wajib diisi.' });
   }
 
   try {
+    // Upload photo to Cloudinary and get back a URL
+    let photo_url = null;
+    try {
+      photo_url = await uploadPhoto(photo_base64, `absenbpjs/${nim}`);
+    } catch (uploadErr) {
+      console.error('Cloudinary upload failed:', uploadErr.message);
+      // Fallback: don't block attendance if image upload fails
+      photo_url = null;
+    }
+
     const query = `
-      INSERT INTO attendance (nim, type, latitude, longitude, photo_base64) 
+      INSERT INTO attendance (nim, type, latitude, longitude, photo_url) 
       VALUES (?, ?, ?, ?, ?)
     `;
     
-    await db.query(query, [nim, type, latitude, longitude, photo_base64]);
+    await db.query(query, [nim, type, latitude, longitude, photo_url]);
     
-    res.json({ success: true, message: `Berhasil check-${type}!` });
+    res.json({ success: true, message: `Berhasil ${type}!`, photo_url });
   } catch (error) {
     console.error('Error saving attendance:', error);
     res.status(500).json({ error: 'Gagal merekam absensi ke database.' });
@@ -102,7 +114,7 @@ app.get('/api/attendance/today/:nim', async (req, res) => {
   try {
     // Get records created today
     const query = `
-      SELECT id, type, timestamp, latitude, longitude, photo_base64 
+      SELECT id, type, timestamp, latitude, longitude, photo_url 
       FROM attendance 
       WHERE nim = ? AND DATE(timestamp) = CURDATE()
       ORDER BY timestamp ASC
