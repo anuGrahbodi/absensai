@@ -31,17 +31,11 @@ function App() {
             </div>
             <div className="brand-text">
               <span className="brand-name">BPJS Absensi</span>
-              <span className="brand-sub">Sistem Presensi Digital</span>
             </div>
           </Link>
 
           <nav className="nav-links">
             <NavLink to="/" icon={LayoutDashboard} label="Dashboard" />
-            <NavLink to="/register-face" icon={Camera} label="Registrasi" />
-            <Link to="/attendance" className="btn btn-primary btn-sm" style={{ marginLeft: '4px' }}>
-              <MapPin size={14} />
-              Presensi
-            </Link>
           </nav>
         </div>
       </header>
@@ -63,7 +57,6 @@ function App() {
         fontSize: 'var(--fs-xs)',
         color: 'var(--text-tertiary)',
       }}>
-        © {new Date().getFullYear()} BPJS Ketenagakerjaan — Sistem Presensi Biometrik
       </footer>
     </div>
   );

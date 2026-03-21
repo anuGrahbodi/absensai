@@ -32,23 +32,6 @@ function MapUpdater({ center }) {
   return null;
 }
 
-function StatusRow({ icon: Icon, label, value, color, bg }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-2) 0' }}>
-      <div style={{
-        width: '30px', height: '30px', borderRadius: 'var(--radius-md)',
-        background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <Icon size={15} style={{ color }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', fontWeight: 500 }}>{label}</p>
-        <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</p>
-      </div>
-    </div>
-  );
-}
-
 export default function Attendance() {
   const videoRef = useRef(null);
   const [viewState, setViewState] = useState('active');
@@ -63,7 +46,6 @@ export default function Attendance() {
   const [faceError, setFaceError] = useState('');
   const [mediaStream, setMediaStream] = useState(null);
   const [allProfiles, setAllProfiles] = useState([]);
-  const [matchedNim, setMatchedNim] = useState('');
 
   // Attendance
   const [attendanceMode, setAttendanceMode] = useState('reguler');
@@ -73,6 +55,7 @@ export default function Attendance() {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [attendanceType, setAttendanceType] = useState('in');
   const [isDoneForToday, setIsDoneForToday] = useState(false);
+  const [matchedNim, setMatchedNim] = useState('');
 
   useEffect(() => {
     let stream = null;
@@ -86,6 +69,22 @@ export default function Attendance() {
           return;
         }
         if (isMounted) setAllProfiles(profiles);
+
+        // Tangkap NIM dari URL
+        const params = new URLSearchParams(window.location.search);
+        const urlNim = params.get('nim');
+        const savedNim = localStorage.getItem('user_nim');
+        
+        const targetNim = urlNim || savedNim;
+
+        if (urlNim && urlNim !== savedNim) {
+           localStorage.setItem('user_nim', urlNim);
+        }
+
+        if (targetNim) {
+          setSearchNim(targetNim);
+          handleSearchNimInternal(targetNim, profiles);
+        }
       } catch (err) {
         if (isMounted) { setFaceStatus('error'); setFaceError(err.message); }
         return;
@@ -118,16 +117,27 @@ export default function Attendance() {
     return () => { isMounted = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
   }, []);
 
-  const handleRefreshLocation = async () => {
-    setLocStatus('locating');
+  const handleSearchNimInternal = async (nim, profiles) => {
+    setIsSearching(true); setFaceError(''); setIsDoneForToday(false);
     try {
-      const coords = await getCurrentLocation();
-      const validation = validateLocationDistance(coords.latitude, coords.longitude);
-      setUserCoords(coords);
-      setLocStatus(validation.isValid ? 'success' : 'warning');
+      const profileInfo = profiles.find(p => p.nim === nim);
+      if (!profileInfo) throw new Error(`NIM ${nim} belum terdaftar. Silakan Registrasi Wajah terlebih dahulu.`);
+      setCurrentUser(profileInfo);
+      const history = await MockApi.getTodayAttendance(nim);
+      setAttendanceHistory(history);
+      determineAttendanceState(history, attendanceMode);
+      setFaceStatus('active');
     } catch (err) {
-      setLocStatus('error'); setLocError(err.message);
+      setFaceError(err.message); setCurrentUser(null); setFaceStatus('paused');
+    } finally {
+      setIsSearching(false);
     }
+  };
+
+  const handleSearchNim = async (e) => {
+    e.preventDefault();
+    if (!searchNim.trim()) return;
+    handleSearchNimInternal(searchNim, allProfiles);
   };
 
   const determineAttendanceState = (history, mode) => {
@@ -151,28 +161,21 @@ export default function Attendance() {
     }
   };
 
-  const handleSearchNim = async (e) => {
-    e.preventDefault();
-    if (!searchNim.trim()) return;
-    setIsSearching(true); setFaceError(''); setIsDoneForToday(false);
-    try {
-      const profileInfo = allProfiles.find(p => p.nim === searchNim);
-      if (!profileInfo) throw new Error('NIM tidak ditemukan. Silakan Registrasi Wajah terlebih dahulu.');
-      setCurrentUser(profileInfo);
-      const history = await MockApi.getTodayAttendance(searchNim);
-      setAttendanceHistory(history);
-      determineAttendanceState(history, attendanceMode);
-      setFaceStatus('active');
-    } catch (err) {
-      setFaceError(err.message); setCurrentUser(null); setFaceStatus('paused');
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
   useEffect(() => {
     if (currentUser) determineAttendanceState(attendanceHistory, attendanceMode);
   }, [attendanceMode]);
+
+  const handleRefreshLocation = async () => {
+    setLocStatus('locating');
+    try {
+      const coords = await getCurrentLocation();
+      const validation = validateLocationDistance(coords.latitude, coords.longitude);
+      setUserCoords(coords);
+      setLocStatus(validation.isValid ? 'success' : 'warning');
+    } catch (err) {
+      setLocStatus('error'); setLocError(err.message);
+    }
+  };
 
   const captureSnapshot = () => {
     if (!videoRef.current) return null;
@@ -229,91 +232,150 @@ export default function Attendance() {
   const locInfo = () => {
     if (locStatus === 'locating') return { text: 'Mencari lokasi GPS...', color: 'var(--info)', bg: 'var(--info-bg)' };
     if (locStatus === 'success') return { text: 'Lokasi berhasil ditemukan', color: 'var(--success)', bg: 'var(--success-bg)' };
-    return { text: 'GPS ditandai (tidak wajib)', color: 'var(--text-secondary)', bg: 'var(--surface-2)' };
+    return { text: 'GPS ditandai', color: 'var(--text-secondary)', bg: 'var(--surface-2)' };
   };
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
 
       {/* ── Page Title ── */}
-      <div>
-        <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, marginBottom: 'var(--space-1)' }}>
-          Presensi Wajah
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)' }}>
-          Pilih mode, masukkan NIM dan verifikasi wajah untuk mencatat kehadiran.
-        </p>
-      </div>
-
       {viewState === 'active' && (
         <>
-          {/* ── Mode Selector ── */}
-          <div className="mode-selector">
-            <label className="mode-option">
-              <input type="radio" name="mode" value="reguler"
-                checked={attendanceMode === 'reguler'}
-                onChange={() => setAttendanceMode('reguler')} />
-              <div className="mode-card">
-                <div className="mode-radio-dot"><div className="mode-radio-inner" /></div>
-                <div className="mode-icon"><Building2 size={18} /></div>
-                <div>
-                  <span className="mode-name">Absen Lokasi</span>
-                  <span className="mode-desc">Dari kantor / radius GPS</span>
-                </div>
-              </div>
-            </label>
+          {/* ── Header & Mode Selector ── */}
+          <div className="card" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+            <div>
+              <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, marginBottom: 'var(--space-1)' }}>
+                Presensi Wajah
+              </h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)' }}>
+                Pilih mode, pastikan wajah terlihat, dan verifikasi untuk mencatat kehadiran.
+              </p>
+            </div>
 
-            <label className="mode-option mode-info">
-              <input type="radio" name="mode" value="zoom"
-                checked={attendanceMode === 'zoom'}
-                onChange={() => setAttendanceMode('zoom')} />
-              <div className="mode-card">
-                <div className="mode-radio-dot"><div className="mode-radio-inner" /></div>
-                <div className="mode-icon" style={{ background: 'var(--info-bg)', color: 'var(--info)' }}>
-                  <Monitor size={18} />
-                </div>
-                <div>
-                  <span className="mode-name" style={{ color: isZoom ? 'var(--info)' : undefined }}>Absen Meeting</span>
-                  <span className="mode-desc">Zoom / dinas luar</span>
-                </div>
-              </div>
-            </label>
-          </div>
-
-          {/* ── NIM Search ── */}
-          <div className="card" style={{ padding: 'var(--space-5)' }}>
-            <form onSubmit={handleSearchNim}>
-              <div className="search-row">
-                <div className="input-group">
-                  <label className="input-label">Nomor Induk Mahasiswa (NIM)</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><Search size={16} /></span>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="Masukkan NIM Anda..."
-                      value={searchNim}
-                      onChange={e => setSearchNim(e.target.value)}
-                      disabled={isSearching}
-                    />
+            {/* Mode Toggle */}
+            <div style={{ 
+              padding: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)', 
+              background: 'var(--surface-2)', border: '1px solid var(--border-color)', 
+              borderRadius: 'var(--radius-lg)' 
+            }}>
+              {/* Opsi 1 */}
+              <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
+                <input 
+                  type="radio" 
+                  name="mode" 
+                  value="reguler"
+                  checked={attendanceMode === 'reguler'}
+                  onChange={() => setAttendanceMode('reguler')} 
+                  style={{ position: 'absolute', opacity: 0 }}
+                />
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  padding: 'var(--space-3) var(--space-4)',
+                  borderRadius: 'var(--radius-md)',
+                  transition: 'all 0.2s ease',
+                  background: attendanceMode === 'reguler' ? 'white' : 'transparent',
+                  boxShadow: attendanceMode === 'reguler' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                  border: attendanceMode === 'reguler' ? '1px solid var(--primary)' : '1px solid transparent',
+                }}>
+                  <div style={{
+                    width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                    border: attendanceMode === 'reguler' ? '6px solid var(--primary)' : '2px solid var(--border-color)',
+                    background: 'white', transition: 'all 0.2s ease'
+                  }} />
+                  <div style={{ 
+                    width: '36px', height: '36px', borderRadius: 'var(--radius-sm)', 
+                    background: attendanceMode === 'reguler' ? 'var(--primary-subtle)' : 'var(--surface-3)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' 
+                  }}>
+                    <Building2 size={18} style={{ color: attendanceMode === 'reguler' ? 'var(--primary)' : 'var(--text-tertiary)' }} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: attendanceMode === 'reguler' ? 'var(--primary)' : 'var(--text-primary)' }}>Absen Lokasi</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Dari kantor / radius GPS</p>
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  className={`btn ${isZoom ? 'btn-info' : 'btn-primary'}`}
-                  style={{ height: '44px', alignSelf: 'flex-end', flexShrink: 0 }}
-                  disabled={isSearching || !searchNim.trim()}
-                >
-                  {isSearching ? <Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite' }} /> : <Search size={16} />}
-                  Cari
-                </button>
-              </div>
-            </form>
+              </label>
 
-            {/* User Status Row */}
+              {/* Opsi 2 */}
+              <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
+                <input 
+                  type="radio" 
+                  name="mode" 
+                  value="zoom"
+                  checked={attendanceMode === 'zoom'}
+                  onChange={() => setAttendanceMode('zoom')} 
+                  style={{ position: 'absolute', opacity: 0 }}
+                />
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  padding: 'var(--space-3) var(--space-4)',
+                  borderRadius: 'var(--radius-md)',
+                  transition: 'all 0.2s ease',
+                  background: attendanceMode === 'zoom' ? 'white' : 'transparent',
+                  boxShadow: attendanceMode === 'zoom' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                  border: attendanceMode === 'zoom' ? '1px solid var(--info)' : '1px solid transparent',
+                }}>
+                  <div style={{
+                    width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                    border: attendanceMode === 'zoom' ? '6px solid var(--info)' : '2px solid var(--border-color)',
+                    background: 'white', transition: 'all 0.2s ease'
+                  }} />
+                  <div style={{ 
+                    width: '36px', height: '36px', borderRadius: 'var(--radius-sm)', 
+                    background: attendanceMode === 'zoom' ? 'var(--info-bg)' : 'var(--surface-3)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' 
+                  }}>
+                    <Monitor size={18} style={{ color: attendanceMode === 'zoom' ? 'var(--info)' : 'var(--text-tertiary)' }} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: attendanceMode === 'zoom' ? 'var(--info)' : 'var(--text-primary)' }}>Absen Meeting</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Zoom / dinas luar</p>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* ── Data Pengguna (NIM Otomatis) ── */}
+          <div className="card" style={{ padding: 'var(--space-5)' }}>
+            {isSearching && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--text-secondary)' }}>
+                <Loader2 size={18} style={{ animation: 'spin 0.7s linear infinite' }} />
+                <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600 }}>Menyiapkan data pengguna...</span>
+              </div>
+            )}
+
+            {!localStorage.getItem('user_nim') && !currentUser && !isSearching && (
+              <form onSubmit={handleSearchNim}>
+                <div className="search-row">
+                  <div className="input-group">
+                    <label className="input-label">Nomor Induk Mahasiswa (NIM)</label>
+                    <div className="input-wrapper">
+                      <span className="input-icon"><Search size={16} /></span>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Masukkan NIM Anda..."
+                        value={searchNim}
+                        onChange={e => setSearchNim(e.target.value)}
+                        disabled={isSearching}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className={`btn ${isZoom ? 'btn-info' : 'btn-primary'}`}
+                    style={{ height: '44px', alignSelf: 'flex-end', flexShrink: 0 }}
+                    disabled={isSearching || !searchNim.trim()}
+                  >
+                    <Search size={16} /> Cari
+                  </button>
+                </div>
+              </form>
+            )}
+
             {currentUser && !isSearching && (
               <div style={{
-                marginTop: 'var(--space-4)',
                 padding: 'var(--space-3) var(--space-4)',
                 background: 'var(--surface-2)',
                 borderRadius: 'var(--radius-lg)',
@@ -354,22 +416,51 @@ export default function Attendance() {
               </div>
             )}
 
-            {/* Face error */}
+            {!currentUser && !isSearching && localStorage.getItem('user_nim') && (
+              <div style={{
+                padding: 'var(--space-3) var(--space-4)',
+                background: 'var(--surface-2)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-color)',
+                display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+              }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={16} style={{ color: 'var(--text-tertiary)' }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)' }}>NIM Terdaftar di Perangkat Ini</p>
+                  <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>{localStorage.getItem('user_nim')}</p>
+                </div>
+              </div>
+            )}
+
             {faceError && (
-              <div className="alert alert-error mt-3">
+              <div className="alert alert-error" style={{ marginTop: (currentUser || localStorage.getItem('user_nim')) ? 'var(--space-3)' : 0 }}>
                 <XCircle size={15} className="alert-icon" />
-                <span>{faceError}</span>
+                <span style={{ fontSize: 'var(--fs-sm)' }}>{faceError}</span>
               </div>
             )}
           </div>
 
-          {/* ── Camera + Map ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}
-            className="attendance-grid">
-            <style>{`@media(max-width:640px){.attendance-grid{grid-template-columns:1fr!important;}}`}</style>
+          {/* ── Camera + Map (Dengan Order HP Terbalik) ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="attendance-grid">
+            
+            {/* CSS INLINE UNTUK MENGATUR URUTAN HP */}
+            <style>
+              {`
+                @media(max-width: 640px) {
+                  .attendance-grid {
+                    display: flex !important;
+                    flex-direction: column;
+                  }
+                  .camera-panel { order: 2; }
+                  .map-panel { order: 1; }
+                }
+              `}
+            </style>
 
             {/* Camera Panel */}
-            <div className="card" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div className="card camera-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
                 <div className="panel-icon panel-icon-primary"><Camera size={16} /></div>
                 <div>
@@ -379,7 +470,6 @@ export default function Attendance() {
               </div>
 
               <div className="camera-viewport">
-                {/* Loading indicator */}
                 {faceStatus === 'loading_models' && (
                   <div style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', zIndex: 20 }}>
                     <Loader2 size={28} style={{ animation: 'spin 0.7s linear infinite' }} />
@@ -391,7 +481,6 @@ export default function Attendance() {
                   style={{ display: (faceStatus === 'active' || faceStatus === 'scanning' || faceStatus === 'error') && mediaStream ? 'block' : 'none' }}
                 />
 
-                {/* Head guide */}
                 {faceStatus !== 'loading_models' && (
                   <div className="camera-overlay">
                     <svg viewBox="0 0 200 250" style={{ width: '100%', height: '100%', opacity: faceStatus === 'scanning' ? 0.5 : 1, transition: 'opacity 0.3s' }}>
@@ -420,26 +509,17 @@ export default function Attendance() {
                   </div>
                 )}
 
-                {/* Paused overlay */}
                 {faceStatus === 'paused' && (
                   <div className="camera-placeholder">
                     <Search size={40} style={{ opacity: 0.4 }} />
-                    <p>{isDoneForToday ? 'Presensi hari ini sudah selesai.' : 'Masukkan NIM Anda terlebih dahulu.'}</p>
+                    <p>{isDoneForToday ? 'Presensi hari ini sudah selesai.' : 'Menunggu NIM untuk mengaktifkan kamera.'}</p>
                   </div>
                 )}
               </div>
-
-              {/* Face error inline */}
-              {faceStatus === 'error' && faceError && (
-                <div className="alert alert-error">
-                  <XCircle size={15} className="alert-icon" />
-                  <span style={{ fontSize: 'var(--fs-xs)' }}>{faceError}</span>
-                </div>
-              )}
             </div>
 
             {/* Map Panel */}
-            <div className="card" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div className="card map-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
                 <div className="panel-icon panel-icon-info"><MapPin size={16} /></div>
                 <div>
@@ -448,7 +528,6 @@ export default function Attendance() {
                 </div>
               </div>
 
-              {/* Map */}
               <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', height: '200px', border: '1px solid var(--border-color)' }}>
                 <MapContainer
                   center={[TARGET_COORDINATE.latitude, TARGET_COORDINATE.longitude]}
@@ -457,7 +536,7 @@ export default function Attendance() {
                   zoomControl={false}
                   dragging={false}
                 >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
                   {userCoords && <MapUpdater center={userCoords} />}
                   {userCoords && (
                     <Marker position={[userCoords.latitude, userCoords.longitude]} icon={userIcon} zIndexOffset={100}>
@@ -467,7 +546,6 @@ export default function Attendance() {
                 </MapContainer>
               </div>
 
-              {/* Location status */}
               {isZoom ? (
                 <div className="alert alert-info" style={{ fontSize: 'var(--fs-xs)' }}>
                   <Monitor size={14} className="alert-icon" />
@@ -542,20 +620,21 @@ export default function Attendance() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {attendanceHistory.map(record => {
-                  const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                  const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
                   const isMeet = record.type.includes('meet');
-                  const isIn = record.type === 'in' || record.type === 'meet-in';
-                  const typeDisplay = { in: 'Check-In', out: 'Check-Out', 'meet-in': 'Meet-In', 'meet-out': 'Meet-Out' };
+                  const isIn = record.type.includes('in');
+                  const badgeText = isIn ? 'IN' : 'OUT';
+                  const typeDisplay = { in: 'Check-In', out: 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
 
                   return (
                     <div key={record.id} className="record-card">
                       <div className="record-photo">
-                        {record.photo_url || record.photo_base64 ? (
+                        { record.photo_base64 || record.photo_url ? (
                           <img src={record.photo_url || record.photo_base64} alt="Snapshot" />
                         ) : (
                           <User size={20} />
                         )}
-                        <span className="record-type-badge">{record.type}</span>
+                        <span className="record-type-badge">{badgeText}</span>
                       </div>
                       <div style={{ flex: 1 }}>
                         <div className="flex items-center justify-between mb-1">
@@ -567,7 +646,7 @@ export default function Attendance() {
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
                         <span className={`badge ${isMeet ? 'badge-info' : 'badge-success'}`} style={{ fontSize: '10px' }}>
-                          {isMeet ? 'Meeting' : isIn ? 'Check-In' : 'Check-Out'}
+                          {typeDisplay[record.type]}
                         </span>
                       </div>
                     </div>
@@ -629,9 +708,6 @@ export default function Attendance() {
             </div>
 
             <div style={{ display: 'flex', gap: 'var(--space-3)', width: '100%' }}>
-              <button className="btn btn-secondary flex-1" onClick={() => window.location.reload()}>
-                Absen Orang Lain
-              </button>
               <button className={`btn flex-1 ${isZoom ? 'btn-info' : 'btn-primary'}`} onClick={() => window.location.href = '/'}>
                 Kembali ke Home
               </button>
