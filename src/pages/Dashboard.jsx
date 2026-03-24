@@ -113,7 +113,7 @@ export default function Dashboard() {
               color: 'white',
             }}>
               Sistem Presensi{' '}
-              <span style={{ color: '#a7f3d0' }}>Cerdas</span>{' '}
+              <span style={{ color: '#a7f3d0' }}></span>{' '}
               BPJS Ketenagakerjaan
             </h1>
 
@@ -124,8 +124,7 @@ export default function Dashboard() {
               marginBottom: 'var(--space-6)',
               maxWidth: '520px',
             }}>
-              Platform absensi generasi baru yang menggabungkan pengenalan wajah presisi tinggi
-              dengan validasi GPS untuk akurasi dan keamanan maksimal.
+              Absensi MBKM USU – Mitra BPJS Ketenagakerjaan berbasis Face Recognition & GPS.
             </p>
 
             <div className="flex flex-wrap gap-3">
