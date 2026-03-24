@@ -57,6 +57,7 @@ export default function Attendance() {
   const [isDoneForToday, setIsDoneForToday] = useState(false);
   const [matchedNim, setMatchedNim] = useState('');
 
+  // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
     let stream = null;
     let isMounted = true;
@@ -70,11 +71,9 @@ export default function Attendance() {
         }
         if (isMounted) setAllProfiles(profiles);
 
-        // Tangkap NIM dari URL
         const params = new URLSearchParams(window.location.search);
         const urlNim = params.get('nim');
         const savedNim = localStorage.getItem('user_nim');
-        
         const targetNim = urlNim || savedNim;
 
         if (urlNim && urlNim !== savedNim) {
@@ -117,15 +116,49 @@ export default function Attendance() {
     return () => { isMounted = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
   }, []);
 
+  // MASTER STATE SYNC: Memastikan UI dan Tipe Absen selalu akurat dengan klik mode
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let modeRecords = [];
+    if (attendanceMode === 'reguler') {
+      modeRecords = attendanceHistory.filter(h => h.type === 'in' || h.type === 'out');
+    } else {
+      modeRecords = attendanceHistory.filter(h => h.type === 'meet-in' || h.type === 'meet-out');
+    }
+
+    // Urutkan dari yang terbaru
+    modeRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    if (modeRecords.length === 0) {
+      setAttendanceType(attendanceMode === 'reguler' ? 'in' : 'meet-in');
+      setIsDoneForToday(false);
+    } else {
+      const last = modeRecords[0];
+      if (attendanceMode === 'reguler' && last.type === 'in') {
+        setAttendanceType('out');
+        setIsDoneForToday(false);
+      } else if (attendanceMode === 'zoom' && last.type === 'meet-in') {
+        // PERBAIKAN: Zoom sekarang bisa "Pulang Meet" (Check-Out)
+        setAttendanceType('meet-out');
+        setIsDoneForToday(false);
+      } else {
+        setAttendanceType('');
+        setIsDoneForToday(true);
+      }
+    }
+  }, [currentUser, attendanceMode, attendanceHistory]);
+
   const handleSearchNimInternal = async (nim, profiles) => {
     setIsSearching(true); setFaceError(''); setIsDoneForToday(false);
     try {
       const profileInfo = profiles.find(p => p.nim === nim);
       if (!profileInfo) throw new Error(`NIM ${nim} belum terdaftar. Silakan Registrasi Wajah terlebih dahulu.`);
+      
       setCurrentUser(profileInfo);
       const history = await MockApi.getTodayAttendance(nim);
       setAttendanceHistory(history);
-      determineAttendanceState(history, attendanceMode);
+      
       setFaceStatus('active');
     } catch (err) {
       setFaceError(err.message); setCurrentUser(null); setFaceStatus('paused');
@@ -139,31 +172,6 @@ export default function Attendance() {
     if (!searchNim.trim()) return;
     handleSearchNimInternal(searchNim, allProfiles);
   };
-
-  const determineAttendanceState = (history, mode) => {
-    let modeRecords = [];
-    if (mode === 'reguler') modeRecords = history.filter(h => h.type === 'in' || h.type === 'out');
-    else modeRecords = history.filter(h => h.type === 'meet-in' || h.type === 'meet-out');
-    modeRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    if (modeRecords.length === 0) {
-      setAttendanceType(mode === 'reguler' ? 'in' : 'meet-in');
-      setIsDoneForToday(false);
-    } else {
-      const last = modeRecords[0];
-      if (last.type === 'in' || last.type === 'meet-in') {
-        setAttendanceType(mode === 'reguler' ? 'out' : 'meet-out');
-        setIsDoneForToday(false);
-      } else {
-        setAttendanceType('');
-        setIsDoneForToday(true);
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (currentUser) determineAttendanceState(attendanceHistory, attendanceMode);
-  }, [attendanceMode]);
 
   const handleRefreshLocation = async () => {
     setLocStatus('locating');
@@ -222,7 +230,7 @@ export default function Attendance() {
 
   const getButtonLabel = () => {
     if (faceStatus === 'scanning') return null;
-    const map = { 'in': 'Check-In', 'out': 'Check-Out', 'meet-in': 'Meet-In', 'meet-out': 'Meet-Out' };
+    const map = { 'in': 'Check-In', 'out': 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
     return map[attendanceType] || '';
   };
 
@@ -442,10 +450,9 @@ export default function Attendance() {
             )}
           </div>
 
-          {/* ── Camera + Map (Dengan Order HP Terbalik) ── */}
+          {/* ── Camera + Map ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="attendance-grid">
             
-            {/* CSS INLINE UNTUK MENGATUR URUTAN HP */}
             <style>
               {`
                 @media(max-width: 640px) {
@@ -459,7 +466,6 @@ export default function Attendance() {
               `}
             </style>
 
-            {/* Camera Panel */}
             <div className="card camera-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
                 <div className="panel-icon panel-icon-primary"><Camera size={16} /></div>
@@ -518,7 +524,6 @@ export default function Attendance() {
               </div>
             </div>
 
-            {/* Map Panel */}
             <div className="card map-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
                 <div className="panel-icon panel-icon-info"><MapPin size={16} /></div>
@@ -624,7 +629,7 @@ export default function Attendance() {
                   const isMeet = record.type.includes('meet');
                   const isIn = record.type.includes('in');
                   const badgeText = isIn ? 'IN' : 'OUT';
-                  const typeDisplay = { in: 'Check-In', out: 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
+                  const typeDisplay = { 'in': 'Check-In', 'out': 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
 
                   return (
                     <div key={record.id} className="record-card">
@@ -663,9 +668,9 @@ export default function Attendance() {
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <div className="success-view animate-fade-in" style={{ borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
             <div className="success-icon-ring"
-              style={{ background: isZoom ? 'var(--info-bg)' : 'var(--success-bg)', borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
-              <CheckCircle2 size={48} style={{ color: isZoom ? 'var(--info)' : 'var(--success)' }} />
-            </div>
+  style={{ background: isZoom ? 'var(--info-bg)' : 'var(--success-bg)', borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
+  <CheckCircle2 size={48} style={{ color: isZoom ? 'var(--info)' : 'var(--success)' }} />
+</div>
 
             <div>
               <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, marginBottom: 'var(--space-2)' }}>
