@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MockApi } from '../utils/api';
-//import { motion, AnimatePresence } from 'motion/react';
 import { motion, AnimatePresence } from "framer-motion";
+
 export default function Dashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, checkInsToday: 0 });
   const [isLoading, setIsLoading] = useState(true);
