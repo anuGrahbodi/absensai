@@ -59,6 +59,8 @@ export default function Attendance() {
   
   // Report (New State)
   const [reportText, setReportText] = useState('');
+  const [isNoReport, setIsNoReport] = useState(false);
+  const MIN_REPORT_WORDS = 70; // 70 Kata
 
   // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
@@ -152,7 +154,7 @@ export default function Attendance() {
   }, [currentUser, attendanceMode, attendanceHistory]);
 
   const handleSearchNimInternal = async (nim, profiles) => {
-    setIsSearching(true); setFaceError(''); setIsDoneForToday(false); setReportText('');
+    setIsSearching(true); setFaceError(''); setIsDoneForToday(false); setReportText(''); setIsNoReport(false);
     try {
       const profileInfo = profiles.find(p => p.nim === nim);
       if (!profileInfo) throw new Error(`NIM ${nim} belum terdaftar. Silakan Registrasi Wajah terlebih dahulu.`);
@@ -213,6 +215,8 @@ export default function Attendance() {
       const lng = userCoords?.longitude || 0;
 
       const isCheckOutMode = attendanceType === 'out' || attendanceType === 'meet-out';
+      
+      const finalReportText = isNoReport ? "Tidak ada laporan hari ini" : reportText;
 
       await MockApi.saveAttendance({ 
         nim: currentUser.nim, 
@@ -220,13 +224,13 @@ export default function Attendance() {
         latitude: lat, 
         longitude: lng, 
         photo_base64: photoBase64,
-        report: isCheckOutMode ? reportText : null 
+        report: isCheckOutMode ? finalReportText : null 
       });
 
       const newHistory = [...attendanceHistory, {
         id: Date.now(), nim: currentUser.nim, type: attendanceType,
         timestamp: new Date().toISOString(), photo_base64: photoBase64, latitude: lat, longitude: lng,
-        report: isCheckOutMode ? reportText : null
+        report: isCheckOutMode ? finalReportText : null
       }];
       setAttendanceHistory(newHistory);
       setMatchedNim(currentUser.nim);
@@ -239,7 +243,11 @@ export default function Attendance() {
   };
 
   const isCheckOut = attendanceType === 'out' || attendanceType === 'meet-out';
-  const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday && (!isCheckOut || reportText.trim() !== '');
+  
+  // Logika untuk menghitung KATA (memecah berdasarkan spasi)
+  const currentWordCount = reportText.trim() === '' ? 0 : reportText.trim().split(/\s+/).length;
+  const isReportValid = isNoReport || (currentWordCount >= MIN_REPORT_WORDS);
+  const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday && (!isCheckOut || isReportValid);
 
   const getButtonLabel = () => {
     if (faceStatus === 'scanning') return null;
@@ -616,25 +624,76 @@ export default function Attendance() {
                   </p>
                 </div>
               </div>
-              <textarea
-                value={reportText}
-                onChange={(e) => setReportText(e.target.value)}
-                placeholder={isZoom 
-                  ? "Tuliskan laporan hasil meeting di sini..." 
-                  : "Tuliskan aktivitas Anda hari ini di sini..."}
-                style={{
-                  width: '100%',
-                  minHeight: '100px',
-                  padding: 'var(--space-3)',
-                  borderRadius: 'var(--radius-md)',
-                  border: `1px solid ${isZoom ? 'var(--info)' : 'var(--primary)'}`,
-                  background: 'var(--surface-1)',
-                  resize: 'vertical',
-                  fontSize: 'var(--fs-sm)',
-                  fontFamily: 'inherit',
-                  outline: 'none'
-                }}
-              />
+
+              {/* Toggle Tidak Ada Laporan (Design Modern) */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)',
+                padding: 'var(--space-3)', background: 'var(--surface-2)', 
+                borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
+              }} onClick={() => {
+                const newVal = !isNoReport;
+                setIsNoReport(newVal);
+                if (newVal) setReportText(''); // Kosongkan teks jika diaktifkan
+              }}>
+                <div style={{
+                  position: 'relative', width: '40px', height: '22px', flexShrink: 0,
+                  background: isNoReport ? 'var(--primary)' : '#d1d5db',
+                  borderRadius: '11px', transition: 'background 0.3s ease',
+                }}>
+                  <div style={{
+                    position: 'absolute', top: '2px', left: isNoReport ? '20px' : '2px',
+                    width: '18px', height: '18px', background: 'white',
+                    borderRadius: '50%', transition: 'left 0.3s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                  }} />
+                </div>
+                <span style={{ fontWeight: 600, color: isNoReport ? 'var(--primary)' : 'var(--text-secondary)' }}>
+                  Tidak ada laporan dari mentor hari ini
+                </span>
+              </div>
+
+              {/* Menampilkan text area hanya jika toggle dimatikan */}
+              {!isNoReport && (
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <textarea
+                    value={reportText}
+                    onChange={(e) => setReportText(e.target.value)}
+                    placeholder={isZoom 
+                        ? "Tuliskan laporan hasil meeting di sini..." 
+                        : "Tuliskan aktivitas Anda hari ini di sini..."}
+                    style={{
+                      width: '100%',
+                      minHeight: '120px',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: `1px solid ${isZoom ? 'var(--info)' : 'var(--primary)'}`,
+                      background: 'var(--surface-1)',
+                      resize: 'vertical',
+                      fontSize: 'var(--fs-sm)',
+                      fontFamily: 'inherit',
+                      outline: 'none',
+                    }}
+                  />
+
+                  {/* Warning Pesan Terlalu Singkat & Counter KATA */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--fs-xs)' }}>
+                    <span style={{ 
+                      color: currentWordCount > 0 && currentWordCount < MIN_REPORT_WORDS ? '#ef4444' : 'var(--text-tertiary)',
+                      fontWeight: 600 
+                    }}>
+                      {currentWordCount > 0 && currentWordCount < MIN_REPORT_WORDS 
+                        ? `⚠️ Terlalu singkat! Minimal ${MIN_REPORT_WORDS} kata.`
+                        : currentWordCount >= MIN_REPORT_WORDS 
+                          ? '' 
+                          : `Minimal ${MIN_REPORT_WORDS} kata.`}
+                    </span>
+                    <span style={{ color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                      {currentWordCount} / {MIN_REPORT_WORDS} Kata
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -662,8 +721,8 @@ export default function Attendance() {
                   ? '⓵ Masukkan NIM terlebih dahulu lalu tekan Cari'
                   : faceStatus === 'paused'
                     ? '⓶ Kamera belum aktif. Cari NIM terlebih dahulu.'
-                    : isCheckOut && reportText.trim() === ''
-                      ? '⚠️ Harap isi laporan terlebih dahulu sebelum Check-Out.'
+                    : isCheckOut && !isReportValid
+                      ? `⚠️ Harap isi laporan (min. ${MIN_REPORT_WORDS} kata) atau centang "Tidak ada laporan".`
                       : 'Kamera sedang memuat...'}
               </p>
             )}
