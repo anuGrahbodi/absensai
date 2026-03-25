@@ -73,29 +73,30 @@ app.post('/api/register', async (req, res) => {
  * Photo is uploaded to Cloudinary; only the URL is stored in MySQL.
  */
 app.post('/api/attendance', async (req, res) => {
-  const { nim, type, latitude, longitude, photo_base64 } = req.body;
+  // 1. Tambahkan 'report' ke dalam destructuring
+  const { nim, type, latitude, longitude, photo_base64, report } = req.body;
 
   if (!nim || !type || latitude === undefined || longitude === undefined || !photo_base64) {
-    return res.status(400).json({ error: 'Semua data (nim, type, latitude, longitude, photo_base64) wajib diisi.' });
+    return res.status(400).json({ error: 'Semua data wajib diisi.' });
   }
 
   try {
-    // Upload photo to Cloudinary and get back a URL
     let photo_url = null;
     try {
       photo_url = await uploadPhoto(photo_base64, `absenbpjs/${nim}`);
     } catch (uploadErr) {
       console.error('Cloudinary upload failed:', uploadErr.message);
-      // Fallback: don't block attendance if image upload fails
       photo_url = null;
     }
 
+    // 2. Update query INSERT untuk memasukkan kolom report
     const query = `
-      INSERT INTO attendance (nim, type, latitude, longitude, photo_url) 
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO attendance (nim, type, latitude, longitude, photo_url, report) 
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
     
-    await db.query(query, [nim, type, latitude, longitude, photo_url]);
+    // 3. Masukkan variabel report ke dalam parameter (bisa bernilai null jika check-in)
+    await db.query(query, [nim, type, latitude, longitude, photo_url, report || null]);
     
     res.json({ success: true, message: `Berhasil ${type}!`, photo_url });
   } catch (error) {
@@ -112,9 +113,9 @@ app.get('/api/attendance/today/:nim', async (req, res) => {
   const { nim } = req.params;
 
   try {
-    // Get records created today
+    // Tambahkan 'report' ke dalam SELECT query agar React bisa merender laporannya di riwayat
     const query = `
-      SELECT id, type, timestamp, latitude, longitude, photo_url 
+      SELECT id, type, timestamp, latitude, longitude, photo_url, report 
       FROM attendance 
       WHERE nim = ? AND DATE(timestamp) = CURDATE()
       ORDER BY timestamp ASC

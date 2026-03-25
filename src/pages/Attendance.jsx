@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   MapPin, Camera, CheckCircle2, XCircle, Loader2,
-  User, Search, LogOut, LogIn, History, Monitor, Building2
+  User, Search, LogOut, LogIn, History, Monitor, Building2, FileText
 } from 'lucide-react';
 import { getCurrentLocation, validateLocationDistance, TARGET_COORDINATE } from '../utils/location';
 import { MockApi } from '../utils/api';
@@ -56,6 +56,9 @@ export default function Attendance() {
   const [attendanceType, setAttendanceType] = useState('in');
   const [isDoneForToday, setIsDoneForToday] = useState(false);
   const [matchedNim, setMatchedNim] = useState('');
+  
+  // Report (New State)
+  const [reportText, setReportText] = useState('');
 
   // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
@@ -139,7 +142,6 @@ export default function Attendance() {
         setAttendanceType('out');
         setIsDoneForToday(false);
       } else if (attendanceMode === 'zoom' && last.type === 'meet-in') {
-        // PERBAIKAN: Zoom sekarang bisa "Pulang Meet" (Check-Out)
         setAttendanceType('meet-out');
         setIsDoneForToday(false);
       } else {
@@ -150,7 +152,7 @@ export default function Attendance() {
   }, [currentUser, attendanceMode, attendanceHistory]);
 
   const handleSearchNimInternal = async (nim, profiles) => {
-    setIsSearching(true); setFaceError(''); setIsDoneForToday(false);
+    setIsSearching(true); setFaceError(''); setIsDoneForToday(false); setReportText('');
     try {
       const profileInfo = profiles.find(p => p.nim === nim);
       if (!profileInfo) throw new Error(`NIM ${nim} belum terdaftar. Silakan Registrasi Wajah terlebih dahulu.`);
@@ -210,11 +212,21 @@ export default function Attendance() {
       const lat = userCoords?.latitude || 0;
       const lng = userCoords?.longitude || 0;
 
-      await MockApi.saveAttendance({ nim: currentUser.nim, type: attendanceType, latitude: lat, longitude: lng, photo_base64: photoBase64 });
+      const isCheckOutMode = attendanceType === 'out' || attendanceType === 'meet-out';
+
+      await MockApi.saveAttendance({ 
+        nim: currentUser.nim, 
+        type: attendanceType, 
+        latitude: lat, 
+        longitude: lng, 
+        photo_base64: photoBase64,
+        report: isCheckOutMode ? reportText : null 
+      });
 
       const newHistory = [...attendanceHistory, {
         id: Date.now(), nim: currentUser.nim, type: attendanceType,
         timestamp: new Date().toISOString(), photo_base64: photoBase64, latitude: lat, longitude: lng,
+        report: isCheckOutMode ? reportText : null
       }];
       setAttendanceHistory(newHistory);
       setMatchedNim(currentUser.nim);
@@ -226,7 +238,8 @@ export default function Attendance() {
     }
   };
 
-  const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday;
+  const isCheckOut = attendanceType === 'out' || attendanceType === 'meet-out';
+  const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday && (!isCheckOut || reportText.trim() !== '');
 
   const getButtonLabel = () => {
     if (faceStatus === 'scanning') return null;
@@ -585,6 +598,46 @@ export default function Attendance() {
             </div>
           </div>
 
+          {/* ── Form Laporan Harian (Muncul Hanya Saat Check-Out) ── */}
+          {isCheckOut && currentUser && (
+            <div className="card animate-fade-in" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <div className="panel-header" style={{ marginBottom: 'var(--space-2)' }}>
+                <div className={`panel-icon ${isZoom ? 'panel-icon-info' : 'panel-icon-primary'}`}>
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <p className="panel-title" style={{ fontSize: 'var(--fs-base)' }}>
+                    Laporan {isZoom ? 'Hasil Meeting' : 'Aktivitas Hari Ini'}
+                  </p>
+                  <p className="panel-subtitle">
+                    {isZoom
+                      ? 'Tuliskan poin-poin penting atau kesimpulan dari meeting hari ini.'
+                      : 'Ceritakan singkat apa yang Anda kerjakan atau pelajari di lokasi hari ini.'}
+                  </p>
+                </div>
+              </div>
+              <textarea
+                value={reportText}
+                onChange={(e) => setReportText(e.target.value)}
+                placeholder={isZoom 
+                  ? "Tuliskan laporan hasil meeting di sini..." 
+                  : "Tuliskan aktivitas Anda hari ini di sini..."}
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${isZoom ? 'var(--info)' : 'var(--primary)'}`,
+                  background: 'var(--surface-1)',
+                  resize: 'vertical',
+                  fontSize: 'var(--fs-sm)',
+                  fontFamily: 'inherit',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          )}
+
           {/* ── Submit Button ── */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}>
             <button
@@ -609,7 +662,9 @@ export default function Attendance() {
                   ? '⓵ Masukkan NIM terlebih dahulu lalu tekan Cari'
                   : faceStatus === 'paused'
                     ? '⓶ Kamera belum aktif. Cari NIM terlebih dahulu.'
-                    : 'Kamera sedang memuat...'}
+                    : isCheckOut && reportText.trim() === ''
+                      ? '⚠️ Harap isi laporan terlebih dahulu sebelum Check-Out.'
+                      : 'Kamera sedang memuat...'}
               </p>
             )}
           </div>
@@ -650,7 +705,15 @@ export default function Attendance() {
                           <MapPin size={10} style={{ display: 'inline', verticalAlign: 'middle' }} />{' '}
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
-                        <span className={`badge ${isMeet ? 'badge-info' : 'badge-success'}`} style={{ fontSize: '10px' }}>
+                        
+                        {/* Menampilkan Report di History jika ada */}
+                        {record.report && (
+                          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: 'var(--space-1)', fontStyle: 'italic' }}>
+                            "{record.report}"
+                          </p>
+                        )}
+
+                        <span className={`badge ${isMeet ? 'badge-info' : 'badge-success'}`} style={{ fontSize: '10px', marginTop: 'var(--space-2)' }}>
                           {typeDisplay[record.type]}
                         </span>
                       </div>

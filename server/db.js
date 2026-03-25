@@ -54,12 +54,14 @@ async function initDB() {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         latitude DECIMAL(10, 8),
         longitude DECIMAL(11, 8),
-        photo_url VARCHAR(512),
+        photo_url LONGTEXT,
+        photo_base64 LONGTEXT,
+        report TEXT,
         FOREIGN KEY (nim) REFERENCES users(nim) ON DELETE CASCADE
       )
     `);
 
-    // Alter existing tables safely to add new columns / modify enums
+    // Alter existing tables safely to modify enums
     try {
        await connection.query(`
          ALTER TABLE attendance MODIFY COLUMN type ENUM('in', 'out', 'meet-in', 'meet-out') NOT NULL;
@@ -68,12 +70,17 @@ async function initDB() {
        console.log("Note: Could not alter attendance enum.");
     }
 
-    // Migrate: add photo_url if table already exists with photo_base64
+    // Migrate: add photo_url if table already exists without it
     try {
-       await connection.query(`ALTER TABLE attendance ADD COLUMN photo_url VARCHAR(512) AFTER longitude`);
-       console.log('✅ Migration: Added photo_url column.');
+       await connection.query(`ALTER TABLE attendance ADD COLUMN photo_url LONGTEXT AFTER longitude`);
+    } catch(alterErr) {}
+
+    // Migrate: add report column if it doesn't exist
+    try {
+       await connection.query(`ALTER TABLE attendance ADD COLUMN report TEXT AFTER photo_url`);
+       console.log('✅ Migration: Added report column.');
     } catch(alterErr) {
-       // Column might already exist; that's fine
+       // Kolom mungkin sudah ada, tidak masalah
     }
 
     console.log('✅ Database initialized: users and attendance tables are ready.');
