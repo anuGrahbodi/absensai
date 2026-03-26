@@ -60,7 +60,7 @@ export default function Attendance() {
   // Report (New State)
   const [reportText, setReportText] = useState('');
   const [isNoReport, setIsNoReport] = useState(false);
-  const MIN_REPORT_WORDS = 70; // 70 Kata
+  const MIN_REPORT_CHARS = 100; // 100 Karakter
 
   // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
@@ -244,9 +244,9 @@ export default function Attendance() {
 
   const isCheckOut = attendanceType === 'out' || attendanceType === 'meet-out';
   
-  // Logika untuk menghitung KATA (memecah berdasarkan spasi)
-  const currentWordCount = reportText.trim() === '' ? 0 : reportText.trim().split(/\s+/).length;
-  const isReportValid = isNoReport || (currentWordCount >= MIN_REPORT_WORDS);
+  // Logika untuk menghitung KARAKTER
+  const currentCharCount = reportText.trim().length;
+  const isReportValid = isNoReport || (currentCharCount >= MIN_REPORT_CHARS);
   const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday && (!isCheckOut || isReportValid);
 
   const getButtonLabel = () => {
@@ -676,20 +676,20 @@ export default function Attendance() {
                     }}
                   />
 
-                  {/* Warning Pesan Terlalu Singkat & Counter KATA */}
+                  {/* Warning Pesan Terlalu Singkat & Counter KARAKTER */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--fs-xs)' }}>
                     <span style={{ 
-                      color: currentWordCount > 0 && currentWordCount < MIN_REPORT_WORDS ? '#ef4444' : 'var(--text-tertiary)',
+                      color: currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS ? '#ef4444' : 'var(--text-tertiary)',
                       fontWeight: 600 
                     }}>
-                      {currentWordCount > 0 && currentWordCount < MIN_REPORT_WORDS 
-                        ? `⚠️ Terlalu singkat! Minimal ${MIN_REPORT_WORDS} kata.`
-                        : currentWordCount >= MIN_REPORT_WORDS 
+                      {currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS 
+                        ? `⚠️ Terlalu singkat! Minimal ${MIN_REPORT_CHARS} karakter.`
+                        : currentCharCount >= MIN_REPORT_CHARS 
                           ? '' 
-                          : `Minimal ${MIN_REPORT_WORDS} kata.`}
+                          : `Minimal ${MIN_REPORT_CHARS} karakter.`}
                     </span>
                     <span style={{ color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                      {currentWordCount} / {MIN_REPORT_WORDS} Kata
+                      {currentCharCount} / {MIN_REPORT_CHARS} Karakter
                     </span>
                   </div>
                 </div>
@@ -722,7 +722,7 @@ export default function Attendance() {
                   : faceStatus === 'paused'
                     ? '⓶ Kamera belum aktif. Cari NIM terlebih dahulu.'
                     : isCheckOut && !isReportValid
-                      ? `⚠️ Harap isi laporan (min. ${MIN_REPORT_WORDS} kata) atau centang "Tidak ada laporan".`
+                      ? `⚠️ Harap isi laporan (min. ${MIN_REPORT_CHARS} karakter) atau centang "Tidak ada laporan".`
                       : 'Kamera sedang memuat...'}
               </p>
             )}
