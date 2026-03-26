@@ -4,9 +4,10 @@ import {
   User, Search, LogOut, LogIn, History, Monitor, Building2, FileText
 } from 'lucide-react';
 import { getCurrentLocation, validateLocationDistance, TARGET_COORDINATE } from '../utils/location';
-import { MockApi } from '../utils/api';
+import { MockApi, API_URL, LOCAL_API_URL } from '../utils/api';
 import { loadFaceModels, extractFaceDescriptorAndAngle, matchFace1toN } from '../utils/face';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -34,6 +35,7 @@ function MapUpdater({ center }) {
 
 export default function Attendance() {
   const videoRef = useRef(null);
+  const navigate = useNavigate();
   const [viewState, setViewState] = useState('active');
 
   // Location
@@ -60,7 +62,15 @@ export default function Attendance() {
   // Report (New State)
   const [reportText, setReportText] = useState('');
   const [isNoReport, setIsNoReport] = useState(false);
+  const [showRegisterBtn, setShowRegisterBtn] = useState(false);
   const MIN_REPORT_CHARS = 100; // 100 Karakter
+
+  // OTP State (New)
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpStep, setOtpStep] = useState(1); // 1 = Request, 2 = Input/Verify
+  const [otpInput, setOtpInput] = useState('');
+  const [isOtpLoading, setIsOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
 
   // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
@@ -154,7 +164,7 @@ export default function Attendance() {
   }, [currentUser, attendanceMode, attendanceHistory]);
 
   const handleSearchNimInternal = async (nim, profiles) => {
-    setIsSearching(true); setFaceError(''); setIsDoneForToday(false); setReportText(''); setIsNoReport(false);
+    setIsSearching(true); setFaceError(''); setIsDoneForToday(false); setReportText(''); setIsNoReport(false); setShowRegisterBtn(false);
     try {
       const profileInfo = profiles.find(p => p.nim === nim);
       if (!profileInfo) throw new Error(`NIM ${nim} belum terdaftar. Silakan Registrasi Wajah terlebih dahulu.`);
@@ -202,13 +212,19 @@ export default function Attendance() {
 
   const handleSubmit = async () => {
     if (faceStatus !== 'active') return;
-    setFaceStatus('scanning'); setFaceError('');
+    setFaceStatus('scanning'); setFaceError(''); setShowRegisterBtn(false);
     try {
+      let faceDescriptor = null;
       if (attendanceMode === 'reguler') {
         const { descriptor, angle } = await extractFaceDescriptorAndAngle(videoRef.current);
         if (angle < 0.6 || angle > 1.4) throw new Error('Tolong hadap lurus ke kamera saat menekan tombol.');
         const result = matchFace1toN(descriptor, [currentUser]);
-        if (!result.isMatch) throw new Error('Wajah tidak cocok dengan profil NIM yang terdaftar.');
+        if (!result.isMatch) {
+          const e = new Error('Wajah tidak cocok dengan profil NIM yang terdaftar.');
+          e.faceMismatch = true;
+          throw e;
+        }
+        faceDescriptor = Array.from(descriptor);
       }
       const photoBase64 = captureSnapshot();
       const lat = userCoords?.latitude || 0;
@@ -224,7 +240,8 @@ export default function Attendance() {
         latitude: lat, 
         longitude: lng, 
         photo_base64: photoBase64,
-        report: isCheckOutMode ? finalReportText : null 
+        report: isCheckOutMode ? finalReportText : null,
+        descriptor: faceDescriptor
       });
 
       const newHistory = [...attendanceHistory, {
@@ -238,6 +255,7 @@ export default function Attendance() {
       if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     } catch (err) {
       setFaceStatus('error'); setFaceError(err.message);
+      if (err.faceMismatch) setShowRegisterBtn(true);
       setTimeout(() => setFaceStatus('active'), 3000);
     }
   };
@@ -253,6 +271,51 @@ export default function Attendance() {
     if (faceStatus === 'scanning') return null;
     const map = { 'in': 'Check-In', 'out': 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
     return map[attendanceType] || '';
+  };
+
+  const handleRequestOtp = async () => {
+    setIsOtpLoading(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${LOCAL_API_URL}/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nim: currentUser.nim })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Gagal mengirim permintaan OTP.');
+      setOtpStep(2);
+    } catch (err) {
+      setOtpError(err.message);
+    } finally {
+      setIsOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpInput.trim()) {
+      setOtpError('Masukkan 6 digit OTP.');
+      return;
+    }
+    setIsOtpLoading(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${LOCAL_API_URL}/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nim: currentUser.nim, otp: otpInput })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'OTP tidak valid.');
+      
+      // Keberhasilan: tutup modal dan ke halaman register
+      setShowOtpModal(false);
+      navigate(`/register-face?nim=${currentUser.nim}`);
+    } catch (err) {
+      setOtpError(err.message);
+    } finally {
+      setIsOtpLoading(false);
+    }
   };
 
   const typeLabel = getButtonLabel();
@@ -464,9 +527,26 @@ export default function Attendance() {
             )}
 
             {faceError && (
-              <div className="alert alert-error" style={{ marginTop: (currentUser || localStorage.getItem('user_nim')) ? 'var(--space-3)' : 0 }}>
-                <XCircle size={15} className="alert-icon" />
-                <span style={{ fontSize: 'var(--fs-sm)' }}>{faceError}</span>
+              <div className="alert alert-error" style={{ marginTop: (currentUser || localStorage.getItem('user_nim')) ? 'var(--space-3)' : 0, flexDirection: 'column', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <XCircle size={15} className="alert-icon" />
+                  <span style={{ fontSize: 'var(--fs-sm)' }}>{faceError}</span>
+                </div>
+                {showRegisterBtn && currentUser?.nim && (
+                  <button 
+                    className="btn"
+                    style={{ marginTop: 'var(--space-3)', width: '100%', fontSize: 'var(--fs-xs)', height: '36px', background: 'white', color: 'var(--error)', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-sm)' }}
+                    onClick={() => {
+                      setShowOtpModal(true);
+                      setOtpStep(1);
+                      setOtpInput('');
+                      setOtpError('');
+                    }}
+                  >
+                    <Camera size={14} style={{ marginRight: '4px', verticalAlign: 'middle', display: 'inline' }} />
+                    Registrasi Wajah Baru / Berhijab (Menambah Data)
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -839,6 +919,116 @@ export default function Attendance() {
                 Kembali ke Home
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── OTP Modal untuk Registrasi Ulang Wajah ── */}
+      {showOtpModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)'
+        }}>
+          <div className="card animate-fade-in" style={{
+            width: '100%', maxWidth: '400px', padding: 'var(--space-5)', 
+            display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
+            position: 'relative'
+          }}>
+            <button 
+              onClick={() => setShowOtpModal(false)}
+              style={{
+                position: 'absolute', top: '16px', right: '16px',
+                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)'
+              }}
+            >
+              <XCircle size={20} />
+            </button>
+
+            <div>
+              <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Verifikasi OTP
+              </h3>
+              <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
+                Keamanan registrasi ulang wajah.
+              </p>
+            </div>
+
+            {otpError && (
+              <div className="alert alert-error" style={{ fontSize: 'var(--fs-xs)', padding: 'var(--space-2) var(--space-3)' }}>
+                <XCircle size={14} className="alert-icon" /> {otpError}
+              </div>
+            )}
+
+            {otpStep === 1 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                <div style={{ 
+                  background: 'var(--surface-2)', padding: 'var(--space-3)', 
+                  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)',
+                  fontSize: 'var(--fs-sm)', color: 'var(--text-primary)', lineHeight: 1.5
+                }}>
+                  <p style={{ marginBottom: '8px' }}>
+                    Anda perlu meminta OTP untuk mendaftar ulang wajah.
+                  </p>
+                  <p style={{ marginBottom: '8px' }}>
+                    1. Klik tombol di bawah untuk men-generate OTP.
+                  </p>
+                  <p>
+                    2. Hubungi <b>Admin Anugrah (082277431128)</b>. Sistem akan mengirim OTP ke email <b>sibaranianugrah@gmail.com</b>.
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ width: '100%' }}
+                  onClick={handleRequestOtp}
+                  disabled={isOtpLoading}
+                >
+                  {isOtpLoading ? <Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite' }} /> : 'Minta OTP Sekarang'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                <div style={{
+                   background: 'var(--info-bg)', padding: 'var(--space-3)', color: 'var(--info)',
+                   borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-xs)', fontWeight: 600,
+                   display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                   <CheckCircle2 size={16} /> OTP telah terkirim ke Admin. Kadaluwarsa dalam 5 menit.
+                </div>
+                
+                <div className="input-group">
+                  <label className="input-label">Masukkan 6-Digit OTP</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    className="input-field"
+                    placeholder="Contoh: 123456"
+                    value={otpInput}
+                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                    style={{ textAlign: 'center', letterSpacing: '4px', fontSize: 'var(--fs-lg)', fontWeight: 800 }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                  <button 
+                    className="btn btn-neutral flex-1"
+                    onClick={() => { setOtpStep(1); setOtpInput(''); setOtpError(''); }}
+                    disabled={isOtpLoading}
+                    style={{ background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                  >
+                    Kembali
+                  </button>
+                  <button 
+                    className="btn btn-primary flex-1"
+                    onClick={handleVerifyOtp}
+                    disabled={isOtpLoading || otpInput.length < 6}
+                  >
+                    {isOtpLoading ? <Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite' }} /> : 'Verifikasi OTP'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
           </div>
         </div>
       )}

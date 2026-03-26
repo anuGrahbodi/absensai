@@ -31,6 +31,16 @@ export const extractFaceDescriptorAndAngle = async (videoElement) => {
   if (!detection) {
     throw new Error("Wajah tidak terdeteksi. Pastikan pencahayaan cukup dan wajah terlihat jelas.");
   }
+  
+  // Validasi wajah full layar kamera
+  // Menghitung rasio box wajah dibandingkan dengan ukuran video penuh
+  const box = detection.detection.box;
+  const faceArea = box.width * box.height;
+  const videoArea = videoElement.videoWidth * videoElement.videoHeight;
+  
+  if (videoArea > 0 && (faceArea / videoArea) < 0.10) {
+    throw new Error("Mohon dekatkan wajah Anda agar memenuhi layar kamera dengan jelas.");
+  }
 
   // Calculate face angle/yaw based on eye and nose landmarks
   const landmarks = detection.landmarks;
@@ -82,7 +92,8 @@ export const getAllUserProfilesFromDB = async () => {
   // Convert raw array descriptor back to Float32Array
   return users.map(u => ({
     nim: u.nim || "Unknown",
-    descriptor: new Float32Array(u.descriptor)
+    descriptor: new Float32Array(u.descriptor),
+    descriptor2: u.descriptor2 ? new Float32Array(u.descriptor2) : null
   }));
 };
 
@@ -115,7 +126,14 @@ export const matchFace1toN = (detectedDescriptor, allProfiles) => {
   let minDistance = Number.MAX_VALUE;
 
   for (const profile of allProfiles) {
-    const distance = faceapi.euclideanDistance(detectedDescriptor, profile.descriptor);
+    const dist1 = faceapi.euclideanDistance(detectedDescriptor, profile.descriptor);
+    let dist2 = Number.MAX_VALUE;
+    
+    if (profile.descriptor2) {
+      dist2 = faceapi.euclideanDistance(detectedDescriptor, profile.descriptor2);
+    }
+    
+    const distance = Math.min(dist1, dist2);
     if (distance < minDistance) {
       minDistance = distance;
       bestMatch = profile;

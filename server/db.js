@@ -40,6 +40,7 @@ async function initDB() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         nim VARCHAR(50) NOT NULL UNIQUE,
         face_descriptor MEDIUMTEXT NOT NULL,
+        face_descriptor2 MEDIUMTEXT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
@@ -73,6 +74,12 @@ async function initDB() {
     // Migrate: add photo_url if table already exists without it
     try {
        await connection.query(`ALTER TABLE attendance ADD COLUMN photo_url LONGTEXT AFTER longitude`);
+    } catch(alterErr) {}
+
+    // Migrate: add face_descriptor2 column if it doesn't exist
+    try {
+       await connection.query(`ALTER TABLE users ADD COLUMN face_descriptor2 MEDIUMTEXT AFTER face_descriptor`);
+       console.log('✅ Migration: Added face_descriptor2 column.');
     } catch(alterErr) {}
 
     // Migrate: add report column if it doesn't exist
