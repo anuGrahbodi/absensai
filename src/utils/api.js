@@ -1,16 +1,12 @@
-
 /**
  * API Service connecting to the Express & MySQL Backend.
  */
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://absensai.vercel.app/api';
-//const API_URL = 'http://localhost:5000/api';
 
 export const MockApi = {
   /**
    * Registers a new user into the database
-   * @param {Object} userData { nim: "123", descriptor: [0.1, 0.2, ...] }
-   * @returns {Promise<Object>} { success: true, message: "..." }
    */
   registerUser: async (userData) => {
     try {
@@ -23,11 +19,7 @@ export const MockApi = {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal menyimpan ke server');
-      }
-
+      if (!response.ok) throw new Error(data.error || 'Gagal menyimpan ke server');
       return data;
     } catch (e) {
       console.error('API Error:', e);
@@ -37,27 +29,14 @@ export const MockApi = {
 
   /**
    * Retrieves all registered user profiles to perform 1:N face matching
-   * @returns {Promise<Array>} Array of user objects
    */
   getAllUsers: async () => {
     try {
-      // 🚀 TAMBAHAN BARU: Memaksa browser tidak menggunakan Cache (Ingatan Lama)
-      // Kita tambahkan parameter waktu (?t=...) dan header Cache-Control
-      const response = await fetch(`${API_URL}/users?t=${new Date().getTime()}`, {
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
+      // 🚀 VERSI ANTI-CORS: Cukup pakai ?t=... saja tanpa header Cache-Control!
+      const response = await fetch(`${API_URL}/users?t=${new Date().getTime()}`);
       
-      if (!response.ok) {
-        throw new Error('Gagal mengambil data dari server');
-      }
-
-      const users = await response.json();
-      return users;
+      if (!response.ok) throw new Error('Gagal mengambil data dari server');
+      return await response.json();
     } catch (e) {
       console.error('API Error:', e);
       throw new Error('Gagal mengambil data dari server.');
@@ -66,8 +45,6 @@ export const MockApi = {
 
   /**
    * Saves a check-in or check-out attendance record
-   * @param {Object} attendanceData { nim, type, latitude, longitude, photo_base64 }
-   * @returns {Promise<Object>} { success: true, message: "..." }
    */
   saveAttendance: async (attendanceData) => {
     try {
@@ -80,11 +57,7 @@ export const MockApi = {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal merekam absensi ke server');
-      }
-
+      if (!response.ok) throw new Error(data.error || 'Gagal merekam absensi ke server');
       return data;
     } catch (e) {
       console.error('API Error:', e);
@@ -94,31 +67,17 @@ export const MockApi = {
 
   /**
    * Gets today's attendance history for a specific NIM
-   * @param {string} nim 
-   * @returns {Promise<Array>} Array of attendance objects
    */
   getTodayAttendance: async (nim) => {
     try {
-      // 🚀 Sekalian kita amankan riwayat absen dari cache agar langsung update saat absen
-      const response = await fetch(`${API_URL}/attendance/today/${nim}?t=${new Date().getTime()}`, {
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      // 🚀 VERSI ANTI-CORS: Cukup pakai ?t=... saja
+      const response = await fetch(`${API_URL}/attendance/today/${nim}?t=${new Date().getTime()}`);
       
-      if (!response.ok) {
-        throw new Error('Gagal mengambil data riwayat dari server');
-      }
-
-      const history = await response.json();
-      return history;
+      if (!response.ok) throw new Error('Gagal mengambil data riwayat dari server');
+      return await response.json();
     } catch (e) {
       console.error('API Error:', e);
       throw new Error('Gagal mengambil riwayat absensi dari server.');
     }
   }
 };
-
-//gi
