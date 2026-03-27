@@ -12,8 +12,9 @@ const dbConfig = {
   queueLimit: 0
 };
 
-// Enable SSL for cloud databases like TiDB or Aiven
-if (process.env.DB_SSL === 'true') {
+// 🚀 PERBAIKAN FATAL: PAKSA SSL MENYALA JIKA BUKAN DI LOCALHOST
+// TiDB Serverless akan membuat Vercel Timeout (Crash) jika SSL mati.
+if (dbConfig.host !== 'localhost') {
   dbConfig.ssl = {
     minVersion: 'TLSv1.2',
     rejectUnauthorized: true
@@ -99,5 +100,3 @@ async function initDB() {
 initDB();
 
 module.exports = pool;
-
-//komit 
