@@ -97,6 +97,6 @@ async function initDB() {
   }
 }
 
-initDB();
+//initDB();
 
 module.exports = pool;
