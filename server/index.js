@@ -11,9 +11,6 @@ const PORT = process.env.PORT || 5000;
 app.use(cors()); // Allow frontend to communicate with backend
 app.use(express.json({ limit: '10mb' })); // Increase limit for large JSON arrays (face descriptors)
 
-// OTP Store: Map NIM -> { otp: string, expiresAt: number }
-const otpStore = new Map();
-
 // Nodemailer Transporter Setup
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -90,7 +87,7 @@ app.get('/api/attendance/today', async (req, res) => {
 
 /**
  * POST /api/request-otp
- * Generates an OTP, stores it with expiration, and sends via email
+ * Generates an OTP, stores it in Database, and sends via email
  */
 app.post('/api/request-otp', async (req, res) => {
   const { nim } = req.body;
@@ -98,68 +95,87 @@ app.post('/api/request-otp', async (req, res) => {
 
   // Generate 6-digit OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 menit dari sekarang
 
-  otpStore.set(nim, { otp, expiresAt });
+  try {
+    // Simpan ke Database (Replace/Update jika NIM sudah pernah minta OTP)
+    await db.query(
+      'INSERT INTO otp_requests (nim, otp, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE otp = ?, expires_at = ?',
+      [nim, otp, expiresAt, otp, expiresAt]
+    );
 
-  console.log(`[OTP GENERATED] NIM: ${nim}, OTP: ${otp}`);
+    console.log(`[OTP GENERATED] NIM: ${nim}, OTP: ${otp}`);
 
-  // Try to send email (if configured)
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    try {
-      await transporter.sendMail({
-        from: '"Absensi AI" <no-reply@absensiai.com>',
-        to: 'bpjstkadmin@gmail.com',
-        subject: `Permintaan OTP Registrasi Wajah - NIM: ${nim}`,
-        html: `
-          <h3>Permintaan OTP Registrasi Ulang Wajah</h3>
-          <p>Seseorang dengan NIM <b>${nim}</b> sedang mencoba meregistrasi ulang wajahnya.</p>
-          <p>Berikan kode OTP berikut kepada pengguna jika diverifikasi:</p>
-          <h2 style="color: #4f46e5; letter-spacing: 5px;">${otp}</h2>
-          <p><i>Kode OTP ini akan kadaluwarsa dalam 5 menit.</i></p>
-        `
-      });
-      console.log('OTP email sent to bpjstkadmin@gmail.com');
-    } catch (err) {
-      console.error('Failed to send OTP email:', err.message);
-      // We don't block the frontend, just log it.
+    // Try to send email (if configured)
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        await transporter.sendMail({
+          from: '"Absensi AI" <no-reply@absensiai.com>',
+          to: 'bpjstkadmin@gmail.com',
+          subject: `Permintaan OTP Registrasi Wajah - NIM: ${nim}`,
+          html: `
+            <h3>Permintaan OTP Registrasi Ulang Wajah</h3>
+            <p>Seseorang dengan NIM <b>${nim}</b> sedang mencoba meregistrasi ulang wajahnya.</p>
+            <p>Berikan kode OTP berikut kepada pengguna jika diverifikasi:</p>
+            <h2 style="color: #4f46e5; letter-spacing: 5px;">${otp}</h2>
+            <p><i>Kode OTP ini akan kadaluwarsa dalam 5 menit.</i></p>
+          `
+        });
+        console.log('OTP email sent to bpjstkadmin@gmail.com');
+      } catch (err) {
+        console.error('Failed to send OTP email:', err.message);
+      }
+    } else {
+      console.log('SMTP not configured, skipping email delivery.');
     }
-  } else {
-    console.log('SMTP not configured, skipping email delivery.');
-  }
 
-  res.json({ success: true, message: 'OTP berhasil di-generate dan dikirim ke Admin.' });
+    res.json({ success: true, message: 'OTP berhasil di-generate dan dikirim ke Admin.' });
+  } catch (error) {
+    console.error('Error saving OTP:', error);
+    res.status(500).json({ error: 'Gagal memproses OTP.' });
+  }
 });
 
 /**
  * POST /api/verify-otp
- * Validates the submitted OTP against the stored one
+ * Validates the submitted OTP against the Database
  */
-app.post('/api/verify-otp', (req, res) => {
+app.post('/api/verify-otp', async (req, res) => {
   const { nim, otp } = req.body;
   
   if (!nim || !otp) {
     return res.status(400).json({ error: 'NIM dan OTP wajib diisi.' });
   }
 
-  const storedData = otpStore.get(nim);
+  try {
+    // Ambil OTP dari Database
+    const [rows] = await db.query('SELECT * FROM otp_requests WHERE nim = ?', [nim]);
 
-  if (!storedData) {
-    return res.status(400).json({ error: 'OTP belum diminta atau sudah dihapus. Silakan minta ulang OTP.' });
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'OTP belum diminta. Silakan minta ulang OTP.' });
+    }
+
+    const storedData = rows[0];
+
+    // Cek Kadaluwarsa
+    if (Date.now() > storedData.expires_at) {
+      await db.query('DELETE FROM otp_requests WHERE nim = ?', [nim]); // Hapus OTP basi
+      return res.status(400).json({ error: 'OTP sudah kadaluwarsa. Silakan minta ulang OTP.' });
+    }
+
+    // Cek Kecocokan
+    if (storedData.otp !== otp) {
+      return res.status(400).json({ error: 'Kode OTP tidak valid.' });
+    }
+
+    // Jika Benar, hapus OTP agar tidak bisa dipakai 2x
+    await db.query('DELETE FROM otp_requests WHERE nim = ?', [nim]);
+    
+    res.json({ success: true, message: 'OTP diverifikasi.' });
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({ error: 'Gagal memverifikasi OTP.' });
   }
-
-  if (Date.now() > storedData.expiresAt) {
-    otpStore.delete(nim);
-    return res.status(400).json({ error: 'OTP sudah kadaluwarsa. Silakan minta ulang OTP.' });
-  }
-
-  if (storedData.otp !== otp) {
-    return res.status(400).json({ error: 'Kode OTP tidak valid.' });
-  }
-
-  // OTP is correct
-  otpStore.delete(nim);
-  res.json({ success: true, message: 'OTP diverifikasi.' });
 });
 
 /**

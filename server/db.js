@@ -11,11 +11,10 @@ const dbConfig = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  timezone: '+00:00' // <--- TAMBAHKAN BARIS INI
+  timezone: '+00:00'
 };
 
 // 🚀 PERBAIKAN FATAL: PAKSA SSL MENYALA JIKA BUKAN DI LOCALHOST ATAU JIKA DB_SSL TRUE
-// Cloud database seperti TiDB Serverless / Aiven akan membuat Vercel Timeout (Crash) jika SSL mati.
 if (dbConfig.host !== 'localhost' || process.env.DB_SSL === 'true') {
   dbConfig.ssl = {
     minVersion: 'TLSv1.2',
@@ -37,7 +36,6 @@ async function initDB() {
     const connection = await pool.getConnection();
     
     // Create users table for storing biometrics
-    // face_descriptor uses MEDIUMTEXT because the float array string is quite long
     await connection.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -65,6 +63,15 @@ async function initDB() {
       )
     `);
 
+    // 🚀 TABEL BARU: Untuk menyimpan OTP agar tidak hilang di Vercel (Serverless)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS otp_requests (
+        nim VARCHAR(50) PRIMARY KEY,
+        otp VARCHAR(6) NOT NULL,
+        expires_at BIGINT NOT NULL
+      )
+    `);
+
     // Alter existing tables safely to modify enums
     try {
        await connection.query(`
@@ -82,7 +89,6 @@ async function initDB() {
     // Migrate: add face_descriptor2 column if it doesn't exist
     try {
        await connection.query(`ALTER TABLE users ADD COLUMN face_descriptor2 MEDIUMTEXT AFTER face_descriptor`);
-       // Hanya log jika berhasil ditambah agar konsol tidak berisik kalau kolom sudah ada
        console.log('✅ Migration: Added face_descriptor2 column.'); 
     } catch(alterErr) {}
 
@@ -94,7 +100,7 @@ async function initDB() {
        // Kolom mungkin sudah ada, tidak masalah
     }
 
-    console.log('✅ Database initialized: users and attendance tables are ready.');
+    console.log('✅ Database initialized: users, attendance, and otp_requests tables are ready.');
     connection.release();
   } catch (err) {
     if (err.code === 'ER_BAD_DB_ERROR') {
