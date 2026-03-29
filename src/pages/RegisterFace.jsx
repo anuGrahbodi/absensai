@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, RefreshCw, CheckCircle, AlertTriangle, ArrowRight, User, ChevronRight } from 'lucide-react';
+import { Camera, RefreshCw, CheckCircle, AlertTriangle, ArrowRight, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loadFaceModels, extractFaceDescriptorAndAngle, saveUserFaceToDB } from '../utils/face';
 
@@ -18,7 +18,7 @@ export default function RegisterFace() {
   const [errorMsg, setErrorMsg] = useState('');
   const [centerDescriptor, setCenterDescriptor] = useState(null);
 
-  // ─── TAMBAHKAN RADAR PENANGKAP NIM DI SINI ───
+  // ─── RADAR PENANGKAP NIM DARI URL ───
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const nimDariUrl = params.get("nim");
@@ -28,6 +28,8 @@ export default function RegisterFace() {
       // setStep(1); // (Opsional) Hapus tanda // di awal baris ini jika Anda ingin langsung melompati halaman input dan otomatis menyalakan kamera
     }
   }, []);
+
+  // ─── INISIALISASI KAMERA & MODEL AI ───
   useEffect(() => {
     let stream = null;
     const initCam = async () => {
@@ -62,6 +64,7 @@ export default function RegisterFace() {
     setErrorMsg('');
     try {
       const { descriptor, angle } = await extractFaceDescriptorAndAngle(videoRef.current);
+      
       if (step === 1) {
         if (angle < 0.7 || angle > 1.3) throw new Error(`Wajah belum lurus ke depan (ratio: ${angle.toFixed(2)}). Coba lagi.`);
         setCenterDescriptor(descriptor);
@@ -69,9 +72,16 @@ export default function RegisterFace() {
         setStatus('waiting');
       } else if (step === 2) {
         if (angle > 0.85 && angle < 1.15) throw new Error(`Tolehkan wajah lebih jauh ke kiri atau kanan (ratio: ${angle.toFixed(2)}).`);
+        
+        // Simpan ke Database
         await saveUserFaceToDB(centerDescriptor, nim);
+        
+        // Sinkronisasi dengan Local Storage untuk Dashboard
+        localStorage.setItem('user_nim', nim);
+        localStorage.setItem('face_registered', 'true');
+        
         setStatus('success');
-        setTimeout(() => navigate('/'), 2500);
+        setTimeout(() => navigate(`/?nim=${nim}`), 2500);
       }
     } catch (err) {
       setStatus('error');

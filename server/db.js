@@ -4,17 +4,19 @@ require('dotenv').config();
 // Default configuration for local development
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'absenbpjs_db',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  timezone: '+00:00' // <--- TAMBAHKAN BARIS INI
 };
 
-// 🚀 PERBAIKAN FATAL: PAKSA SSL MENYALA JIKA BUKAN DI LOCALHOST
-// TiDB Serverless akan membuat Vercel Timeout (Crash) jika SSL mati.
-if (dbConfig.host !== 'localhost') {
+// 🚀 PERBAIKAN FATAL: PAKSA SSL MENYALA JIKA BUKAN DI LOCALHOST ATAU JIKA DB_SSL TRUE
+// Cloud database seperti TiDB Serverless / Aiven akan membuat Vercel Timeout (Crash) jika SSL mati.
+if (dbConfig.host !== 'localhost' || process.env.DB_SSL === 'true') {
   dbConfig.ssl = {
     minVersion: 'TLSv1.2',
     rejectUnauthorized: true
@@ -41,6 +43,7 @@ async function initDB() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         nim VARCHAR(50) NOT NULL UNIQUE,
         face_descriptor MEDIUMTEXT NOT NULL,
+        face_descriptor2 MEDIUMTEXT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
@@ -76,6 +79,13 @@ async function initDB() {
        await connection.query(`ALTER TABLE attendance ADD COLUMN photo_url LONGTEXT AFTER longitude`);
     } catch(alterErr) {}
 
+    // Migrate: add face_descriptor2 column if it doesn't exist
+    try {
+       await connection.query(`ALTER TABLE users ADD COLUMN face_descriptor2 MEDIUMTEXT AFTER face_descriptor`);
+       // Hanya log jika berhasil ditambah agar konsol tidak berisik kalau kolom sudah ada
+       console.log('✅ Migration: Added face_descriptor2 column.'); 
+    } catch(alterErr) {}
+
     // Migrate: add report column if it doesn't exist
     try {
        await connection.query(`ALTER TABLE attendance ADD COLUMN report TEXT AFTER photo_url`);
@@ -97,6 +107,6 @@ async function initDB() {
   }
 }
 
-//initDB();
+initDB();
 
 module.exports = pool;

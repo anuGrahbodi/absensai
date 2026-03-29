@@ -1,4 +1,5 @@
 import * as faceapi from 'face-api.js';
+import { MockApi } from './api';
 
 /**
  * Loads the pre-trained face-api.js models from the public/models directory
@@ -31,6 +32,16 @@ export const extractFaceDescriptorAndAngle = async (videoElement) => {
   if (!detection) {
     throw new Error("Wajah tidak terdeteksi. Pastikan pencahayaan cukup dan wajah terlihat jelas.");
   }
+  
+  // Validasi wajah full layar kamera
+  // Menghitung rasio box wajah dibandingkan dengan ukuran video penuh
+  const box = detection.detection.box;
+  const faceArea = box.width * box.height;
+  const videoArea = videoElement.videoWidth * videoElement.videoHeight;
+  
+  if (videoArea > 0 && (faceArea / videoArea) < 0.10) {
+    throw new Error("Mohon dekatkan wajah Anda agar memenuhi layar kamera dengan jelas.");
+  }
 
   // Calculate face angle/yaw based on eye and nose landmarks
   const landmarks = detection.landmarks;
@@ -51,10 +62,9 @@ export const extractFaceDescriptorAndAngle = async (videoElement) => {
   };
 };
 
-import { MockApi } from './api';
 
 /**
- * Saves a face descriptor and NIM to Database (Simulated API)
+ * Saves a face descriptor and NIM to Database
  * @param {Float32Array} descriptor 
  * @param {string} nim
  */
@@ -66,13 +76,13 @@ export const saveUserFaceToDB = async (descriptor, nim) => {
     nim: nim
   };
   
-  // Call our mock backend
+  // Call backend API
   await MockApi.registerUser(data);
 };
 
 /**
- * Gets ALL saved user profiles from Database (Simulated API)
- * @returns {Promise<Array<{ descriptor: Float32Array, nim: string }>>}
+ * Gets ALL saved user profiles from Database
+ * @returns {Promise<Array<{ descriptor: Float32Array, descriptor2: Float32Array | null, nim: string }>>}
  */
 export const getAllUserProfilesFromDB = async () => {
   const users = await MockApi.getAllUsers();
@@ -82,7 +92,8 @@ export const getAllUserProfilesFromDB = async () => {
   // Convert raw array descriptor back to Float32Array
   return users.map(u => ({
     nim: u.nim || "Unknown",
-    descriptor: new Float32Array(u.descriptor)
+    descriptor: u.descriptor ? new Float32Array(u.descriptor) : null,
+    descriptor2: u.descriptor2 ? new Float32Array(u.descriptor2) : null
   }));
 };
 
@@ -100,30 +111,71 @@ export const matchFace = (detectedDescriptor, savedDescriptor) => {
   };
 }
 
+
 /**
  * 1:N match logic. Scans all profiles and returns the best match.
+ * SUDAH DILENGKAPI PROTEKSI 128-DIMENSI & ANTI-KEBOBOLAN & CONTINUOUS LEARNING (2 WAJAH)
  * @param {Float32Array} detectedDescriptor 
- * @param {Array<{descriptor: Float32Array, nim: string}>} allProfiles 
+ * @param {Array<{descriptor: Array, descriptor2: Array, nim: string}>} allProfiles 
  * @returns {{isMatch: boolean, nim: string, distance: number}}
  */
 export const matchFace1toN = (detectedDescriptor, allProfiles) => {
-  if (allProfiles.length === 0) {
+  if (!allProfiles || allProfiles.length === 0) {
     return { isMatch: false, nim: null, distance: 1.0 };
   }
 
   let bestMatch = null;
   let minDistance = Number.MAX_VALUE;
 
+  // 1. VALIDASI WAJAH KAMERA: Wajib memiliki tepat 128 titik biometrik
+  const detectedArr = Object.values(detectedDescriptor);
+  if (detectedArr.length !== 128) {
+    return { isMatch: false, nim: null, distance: 1.0 }; // Tolak jika wajah di kamera tidak terbaca sempurna
+  }
+  const detected = new Float32Array(detectedArr);
+
   for (const profile of allProfiles) {
-    const distance = faceapi.euclideanDistance(detectedDescriptor, profile.descriptor);
-    if (distance < minDistance) {
-      minDistance = distance;
-      bestMatch = profile;
+    try {
+      let dist1 = Number.MAX_VALUE;
+      let dist2 = Number.MAX_VALUE;
+
+      // 2. CEK WAJAH 1 (Terbaru): Hanya proses jika datanya utuh 128 titik
+      if (profile.descriptor) {
+        const desc1Arr = Object.values(profile.descriptor);
+        if (desc1Arr.length === 128) {
+          const desc1 = new Float32Array(desc1Arr);
+          dist1 = faceapi.euclideanDistance(detected, desc1);
+        }
+      }
+
+      // 3. CEK WAJAH 2 (Cadangan): Hanya proses jika datanya utuh 128 titik
+      if (profile.descriptor2) {
+        const desc2Arr = Object.values(profile.descriptor2);
+        if (desc2Arr.length === 128) {
+          const desc2 = new Float32Array(desc2Arr);
+          dist2 = faceapi.euclideanDistance(detected, desc2);
+        }
+      }
+
+      // 4. PROTEKSI ANTI-BUG: Cegah sistem menganggap jarak '0' (akibat array kosong) sebagai kecocokan 100%
+      if (dist1 === 0) dist1 = Number.MAX_VALUE;
+      if (dist2 === 0) dist2 = Number.MAX_VALUE;
+
+      // Ambil skor kemiripan terbaik dari Wajah 1 atau Wajah 2
+      const distance = Math.min(dist1, dist2);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestMatch = profile;
+      }
+    } catch (err) {
+      console.error("Gagal membaca struktur array biometrik:", err);
     }
   }
 
-  // Common threshold for FaceRecognitionNet is ~0.5 to 0.6
-  if (minDistance < 0.5) {
+  // 5. AMBANG BATAS DIKEMBALIKAN KE SANGAT KETAT (0.50)
+  // Orang asing biasanya mendapat skor di atas 0.60
+  if (minDistance > 0.0 && minDistance <= 0.50) {
     return { isMatch: true, nim: bestMatch.nim, distance: minDistance };
   }
 
