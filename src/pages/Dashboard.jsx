@@ -5,20 +5,23 @@ import {
   ArrowRight, CheckCircle2, AlertCircle, X,
   History, User
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MockApi } from '../utils/api';
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Dashboard() {
+  const location = useLocation(); // Menggunakan useLocation untuk reaktivitas URL
+  const navigate = useNavigate();
+
+  // Inisialisasi awal langsung dari localStorage agar tidak ada "flicker" tombol Daftar Wajah
+  const [isRegistered, setIsRegistered] = useState(
+    localStorage.getItem('face_registered') === 'true'
+  );
   const [stats, setStats] = useState({ totalUsers: 0, checkInsToday: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [showWarning, setShowWarning] = useState(false);
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [activeNim, setActiveNim] = useState('');
-  
+  const [activeNim, setActiveNim] = useState(localStorage.getItem('user_nim') || '');
   const [attendanceHistory, setAttendanceHistory] = useState([]); 
-  
-  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -26,7 +29,8 @@ export default function Dashboard() {
         const users = await MockApi.getAllUsers();
         let realCheckIns = 0;
         
-        const params = new URLSearchParams(window.location.search);
+        // Parsing URL menggunakan location.search dari React Router yang lebih reaktif
+        const params = new URLSearchParams(location.search);
         const urlNim = params.get('nim');
         const savedNim = localStorage.getItem('user_nim');
         const currentNim = urlNim || savedNim;
@@ -39,16 +43,25 @@ export default function Dashboard() {
           setActiveNim(currentNim);
         }
 
-        // SATPAM FINAL: Mengecek nama kolom "descriptor" dari Backend Express
-        // dan memastikan panjang array-nya lebih dari 0 (tidak kosong []).
+        // Pastikan komparasi string yang akurat untuk mencegah bug tipe data
+        const safeNim = currentNim ? String(currentNim).trim() : '';
+        
+        // SATPAM FINAL: Memastikan user ada DAN array descriptor tidak kosong
         const isUserExistInDb = users.some(u => 
-          u.nim === currentNim && 
+          String(u.nim).trim() === safeNim && 
           u.descriptor && 
           u.descriptor.length > 0 
         );
-
-        setIsRegistered(isUserExistInDb);
-        localStorage.setItem('face_registered', isUserExistInDb ? 'true' : 'false');
+        
+        // Sinkronisasi ulang localStorage berdasarkan data paling mutakhir dari DB
+        if (isUserExistInDb) {
+            setIsRegistered(true);
+            localStorage.setItem('face_registered', 'true');
+        } else if (users.length > 0 && currentNim) {
+            // Jika DB berhasil di-fetch tapi user tidak ada atau descriptor kosong, paksa false
+            setIsRegistered(false);
+            localStorage.setItem('face_registered', 'false');
+        }
         
         if (currentNim && isUserExistInDb) {
           const myHistory = await MockApi.getTodayAttendance(currentNim);
@@ -62,6 +75,8 @@ export default function Dashboard() {
         });
       } catch (err) {
         console.error(err);
+        // Jika gagal koneksi (network error), tetap percayai status sementara di localStorage
+        setIsRegistered(localStorage.getItem('face_registered') === 'true');
       } finally {
         setIsLoading(false);
       }
@@ -70,7 +85,7 @@ export default function Dashboard() {
     fetchStats();
     const intervalId = setInterval(fetchStats, 10000); 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [location.search]); // Akan dijalankan ulang jika ada perubahan parameter navigasi URL
 
   const handleStartPresence = (e) => {
     if (!isRegistered) {
@@ -241,30 +256,50 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {attendanceHistory.map(record => {
-                  // Format Waktu menggunakan Titik (Contoh: 09.55)
-                  const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+                  // Pastikan waktu di-render secara eksplisit dalam Waktu Indonesia Barat (WIB)
+                  const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { 
+                    timeZone: 'Asia/Jakarta', 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false
+                  }).replace(':', '.');
+                  
                   const isMeet = record.type.includes('meet');
                   const isIn = record.type.includes('in');
-                  const badgeText = isIn ? 'IN' : 'OUT'; // Badge di foto jadi IN/OUT
+                  const badgeText = isIn ? 'IN' : 'OUT';
                   const typeDisplay = { 'in': 'Check-In', 'out': 'Check-Out', 'meet-in': 'Check-In', 'meet-out': 'Check-Out' };
 
                   return (
                     <div key={record.id} className="record-card">
                       <div className="record-photo">
-                        {/* HANYA MUNCULKAN IKON USER POLOS */}
-                        <User size={20} />
+                        {/* Menampilkan foto jika ada, jika tidak gunakan ikon User */}
+                        { record.photo_base64 || record.photo_url ? (
+                          <img src={record.photo_url || record.photo_base64} alt="Snapshot" />
+                        ) : (
+                          <User size={20} />
+                        )}
                         <span className="record-type-badge">{badgeText}</span>
                       </div>
                       <div style={{ flex: 1 }}>
                         <div className="flex items-center justify-between mb-1">
                           <p style={{ fontWeight: 700, fontSize: 'var(--fs-sm)' }}>{typeDisplay[record.type]}</p>
-                          <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', fontFamily: 'monospace', fontWeight: 600 }}>{timeStr}</span>
+                          <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {timeStr} WIB
+                          </span>
                         </div>
                         <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)' }}>
                           <MapPin size={10} style={{ display: 'inline', verticalAlign: 'middle' }} />{' '}
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
-                        <span className={`badge ${isMeet ? 'badge-info' : 'badge-success'}`} style={{ fontSize: '10px' }}>
+                        
+                        {/* Menampilkan Report di History jika ada */}
+                        {record.report && (
+                          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: 'var(--space-1)', fontStyle: 'italic' }}>
+                            "{record.report}"
+                          </p>
+                        )}
+
+                        <span className={`badge ${isMeet ? 'badge-info' : 'badge-success'}`} style={{ fontSize: '10px', marginTop: 'var(--space-2)' }}>
                           {typeDisplay[record.type]}
                         </span>
                       </div>
