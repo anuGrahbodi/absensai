@@ -72,12 +72,27 @@ export default function Attendance() {
   const [isOtpLoading, setIsOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
 
+  // Zoom Access State
+  const [isZoomEnabled, setIsZoomEnabled] = useState(true);
+
   // INISIALISASI CAMERA & LOKASI
   useEffect(() => {
     let stream = null;
     let isMounted = true;
 
     const init = async () => {
+      // Cek Status Zoom dari API
+      try {
+        const zoomRes = await fetch("https://api-penilaian.vercel.app/get_zoom_status.php");
+        const zoomData = await zoomRes.json();
+        if (zoomData.status === "success" && isMounted) {
+          setIsZoomEnabled(zoomData.is_enabled);
+          if (!zoomData.is_enabled && attendanceMode === 'zoom') setAttendanceMode('reguler');
+        }
+      } catch (err) { 
+        console.error("Gagal cek status zoom", err); 
+      }
+
       try {
         const profiles = await MockApi.getAllUsers();
         if (profiles.length === 0) {
@@ -388,22 +403,21 @@ export default function Attendance() {
                 </div>
               </label>
 
-              {/* Opsi 2 */}
-              <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
+            {/* Opsi 2 */}
+              <label style={{ flex: 1, position: 'relative', cursor: isZoomEnabled ? 'pointer' : 'not-allowed', opacity: isZoomEnabled ? 1 : 0.5 }}>
                 <input 
                   type="radio" 
                   name="mode" 
                   value="zoom"
                   checked={attendanceMode === 'zoom'}
-                  onChange={() => setAttendanceMode('zoom')} 
+                  onChange={() => { if (isZoomEnabled) setAttendanceMode('zoom'); }} 
+                  disabled={!isZoomEnabled}
                   style={{ position: 'absolute', opacity: 0 }}
                 />
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-                  padding: 'var(--space-3) var(--space-4)',
-                  borderRadius: 'var(--radius-md)',
-                  transition: 'all 0.2s ease',
-                  background: attendanceMode === 'zoom' ? 'white' : 'transparent',
+                  padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-md)',
+                  transition: 'all 0.2s ease', background: attendanceMode === 'zoom' ? 'white' : 'transparent',
                   boxShadow: attendanceMode === 'zoom' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
                   border: attendanceMode === 'zoom' ? '1px solid var(--info)' : '1px solid transparent',
                 }}>
@@ -421,7 +435,9 @@ export default function Attendance() {
                   </div>
                   <div>
                     <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: attendanceMode === 'zoom' ? 'var(--info)' : 'var(--text-primary)' }}>Absen Meeting</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Zoom</p>
+                    <p style={{ fontSize: '11px', color: isZoomEnabled ? 'var(--text-tertiary)' : 'var(--error)' }}>
+                      {isZoomEnabled ? 'Zoom' : 'Dinonaktifkan'}
+                    </p>
                   </div>
                 </div>
               </label>
