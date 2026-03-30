@@ -383,7 +383,7 @@ export default function Attendance() {
                   </div>
                   <div>
                     <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: attendanceMode === 'reguler' ? 'var(--primary)' : 'var(--text-primary)' }}>Absen Lokasi</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Dari kantor / radius GPS</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Kantor / Lapangan</p>
                   </div>
                 </div>
               </label>
@@ -421,7 +421,7 @@ export default function Attendance() {
                   </div>
                   <div>
                     <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: attendanceMode === 'zoom' ? 'var(--info)' : 'var(--text-primary)' }}>Absen Meeting</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Zoom / dinas luar</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Zoom</p>
                   </div>
                 </div>
               </label>
