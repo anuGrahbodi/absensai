@@ -84,7 +84,7 @@ export default function Attendance() {
       // Cek Status Zoom dari API
       try {
         // 🚀 MENGGUNAKAN LINK LIVE BACKEND
-        const zoomRes = await fetch('https://absensai.vercel.app/api/get_zoom_status');
+        const zoomRes = await fetch('/api/update_zoom_status');
         const zoomData = await zoomRes.json();
         
         if (zoomData.status === "success" && isMounted) {
