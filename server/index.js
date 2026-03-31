@@ -298,6 +298,53 @@ app.get('/api/attendance/today/:nim', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/get_zoom_status
+ * Mengambil status fitur Zoom
+ */
+app.get('/api/get_zoom_status', async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT nilai FROM pengaturan_sistem WHERE nama_pengaturan = 'zoom_enabled'");
+    let isEnabled = true; // default ON
+    
+    if (rows.length > 0) {
+      isEnabled = rows[0].nilai === 'true';
+    }
+    
+    res.json({ status: "success", is_enabled: isEnabled });
+  } catch (error) {
+    console.error('Error fetching zoom status:', error);
+    res.json({ status: "error", message: error.message, is_enabled: true });
+  }
+});
+
+/**
+ * POST /api/update_zoom_status
+ * Mengubah status fitur Zoom (Untuk Admin/Mentor)
+ */
+app.post('/api/update_zoom_status', async (req, res) => {
+  const { is_enabled } = req.body;
+  
+  if (typeof is_enabled === 'undefined') {
+    return res.status(400).json({ status: "error", message: "Data tidak lengkap" });
+  }
+
+  const statusStr = is_enabled ? 'true' : 'false';
+
+  try {
+    await db.query(
+      `INSERT INTO pengaturan_sistem (nama_pengaturan, nilai) 
+       VALUES ('zoom_enabled', ?) 
+       ON DUPLICATE KEY UPDATE nilai = ?`,
+      [statusStr, statusStr]
+    );
+    res.json({ status: "success" });
+  } catch (error) {
+    console.error('Error updating zoom status:', error);
+    res.status(500).json({ status: "error", message: "Gagal menyimpan ke database TiDB: " + error.message });
+  }
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);

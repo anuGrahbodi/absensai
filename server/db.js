@@ -72,6 +72,21 @@ async function initDB() {
       )
     `);
 
+    // 👇 PASTE KODE INI DI SINI 👇
+    // 🚀 TABEL BARU: Untuk menyimpan status Zoom
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS pengaturan_sistem (
+        nama_pengaturan VARCHAR(50) PRIMARY KEY,
+        nilai VARCHAR(50)
+      )
+    `);
+
+    // Masukkan nilai default zoom jika tabel baru saja dibuat
+    await connection.query(`
+      INSERT IGNORE INTO pengaturan_sistem (nama_pengaturan, nilai) 
+      VALUES ('zoom_enabled', 'true')
+    `);
+
     // Alter existing tables safely to modify enums
     try {
        await connection.query(`

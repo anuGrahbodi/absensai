@@ -83,7 +83,7 @@ export default function Attendance() {
     const init = async () => {
       // Cek Status Zoom dari API
       try {
-        const zoomRes = await fetch("https://api-penilaian.vercel.app/get_zoom_status.php");
+        const zoomRes = await fetch(`${API_URL || 'http://localhost:5000/api'}/get_zoom_status`);
         const zoomData = await zoomRes.json();
         if (zoomData.status === "success" && isMounted) {
           setIsZoomEnabled(zoomData.is_enabled);
