@@ -241,7 +241,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* ─── Riwayat Kehadiran Hari Ini (Sama Persis Attendance.jsx) ─── */}
+        {/* ─── Riwayat Kehadiran Hari Ini ─── */}
         {isRegistered && attendanceHistory.length > 0 && (
           <section className="animate-fade-in pb-10">
             <div className="card" style={{ padding: 'var(--space-5)' }}>
@@ -256,7 +256,6 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {attendanceHistory.map(record => {
-                  // Pastikan waktu di-render secara eksplisit dalam Waktu Indonesia Barat (WIB)
                   const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { 
                     timeZone: 'Asia/Jakarta', 
                     hour: '2-digit', 
@@ -272,7 +271,6 @@ export default function Dashboard() {
                   return (
                     <div key={record.id} className="record-card">
                       <div className="record-photo">
-                        {/* Menampilkan foto jika ada, jika tidak gunakan ikon User */}
                         { record.photo_base64 || record.photo_url ? (
                           <img src={record.photo_url || record.photo_base64} alt="Snapshot" />
                         ) : (
@@ -280,7 +278,9 @@ export default function Dashboard() {
                         )}
                         <span className="record-type-badge">{badgeText}</span>
                       </div>
-                      <div style={{ flex: 1 }}>
+                      
+                      {/* 🔴 PERBAIKAN: minWidth: 0 ditambahkan pada kontainer parent */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex items-center justify-between mb-1">
                           <p style={{ fontWeight: 700, fontSize: 'var(--fs-sm)' }}>{typeDisplay[record.type]}</p>
                           <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', fontFamily: 'monospace', fontWeight: 600 }}>
@@ -292,9 +292,16 @@ export default function Dashboard() {
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
                         
-                        {/* Menampilkan Report di History jika ada */}
+                        {/* 🔴 PERBAIKAN: css overflowWrap dan wordBreak ditambahkan pada teks report */}
                         {record.report && (
-                          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: 'var(--space-1)', fontStyle: 'italic' }}>
+                          <p style={{ 
+                            fontSize: 'var(--fs-xs)', 
+                            color: 'var(--text-secondary)', 
+                            marginTop: 'var(--space-1)', 
+                            fontStyle: 'italic',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere'
+                          }}>
                             "{record.report}"
                           </p>
                         )}

@@ -83,8 +83,6 @@ export default function Attendance() {
     const init = async () => {
       // Cek Status Zoom dari API
       try {
-        // 🚀 MENGGUNAKAN LINK LIVE BACKEND
-        // KODE BARU (Bypass Cache)
         const zoomRes = await fetch(`https://absensai.vercel.app/api/get_zoom_status?t=${new Date().getTime()}`, {
           cache: 'no-store'
         });
@@ -151,7 +149,7 @@ export default function Attendance() {
     return () => { isMounted = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
   }, []);
 
-  // MASTER STATE SYNC: Memastikan UI dan Tipe Absen selalu akurat dengan klik mode
+  // MASTER STATE SYNC
   useEffect(() => {
     if (!currentUser) return;
 
@@ -162,7 +160,6 @@ export default function Attendance() {
       modeRecords = attendanceHistory.filter(h => h.type === 'meet-in' || h.type === 'meet-out');
     }
 
-    // Urutkan dari yang terbaru
     modeRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     if (modeRecords.length === 0) {
@@ -251,7 +248,6 @@ export default function Attendance() {
       const lng = userCoords?.longitude || 0;
 
       const isCheckOutMode = attendanceType === 'out' || attendanceType === 'meet-out';
-      
       const finalReportText = isNoReport ? "Tidak ada laporan hari ini" : reportText;
 
       await MockApi.saveAttendance({ 
@@ -281,8 +277,6 @@ export default function Attendance() {
   };
 
   const isCheckOut = attendanceType === 'out' || attendanceType === 'meet-out';
-  
-  // Logika untuk menghitung KARAKTER
   const currentCharCount = reportText.trim().length;
   const isReportValid = isNoReport || (currentCharCount >= MIN_REPORT_CHARS);
   const isReadyToSubmit = faceStatus === 'active' && !isDoneForToday && (!isCheckOut || isReportValid);
@@ -328,7 +322,6 @@ export default function Attendance() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'OTP tidak valid.');
       
-      // Keberhasilan: tutup modal dan ke halaman register
       setShowOtpModal(false);
       navigate(`/register-face?nim=${currentUser.nim}`);
     } catch (err) {
@@ -348,7 +341,78 @@ export default function Attendance() {
   };
 
   return (
-    <div className="animate-fade-in" style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    <div className="animate-fade-in responsive-container">
+      
+      {/* ── STYLES UNTUK RESPONSIVE DESIGN ── */}
+      <style>
+        {`
+          .responsive-container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-6);
+            padding: var(--space-4);
+          }
+          
+          .main-action-container {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+          }
+
+          .mode-selector-wrapper {
+            padding: var(--space-2);
+            display: flex;
+            gap: var(--space-2);
+            background: var(--surface-2);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+          }
+
+          .search-form-row {
+            display: flex;
+            align-items: flex-end;
+            gap: var(--space-3);
+          }
+
+          .attendance-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-4);
+          }
+
+          /* Responsive Breakpoints */
+          @media(max-width: 768px) {
+            .attendance-grid {
+              grid-template-columns: 1fr;
+            }
+            .camera-panel { order: 2; }
+            .map-panel { order: 1; }
+            
+            .report-section { order: 1; }
+            .camera-map-section { order: 2; }
+            .submit-section { order: 3; }
+            
+            .search-form-row {
+              flex-direction: column;
+              align-items: stretch;
+            }
+            .search-form-row button {
+              align-self: stretch;
+            }
+          }
+
+          @media(max-width: 480px) {
+            .responsive-container {
+              padding: var(--space-2);
+            }
+            .mode-selector-wrapper {
+              flex-direction: column;
+            }
+          }
+        `}
+      </style>
 
       {/* ── Page Title ── */}
       {viewState === 'active' && (
@@ -365,12 +429,7 @@ export default function Attendance() {
             </div>
 
             {/* Mode Toggle */}
-            <div style={{ 
-              padding: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)', 
-              background: 'var(--surface-2)', border: '1px solid var(--border-color)', 
-              borderRadius: 'var(--radius-lg)' 
-            }}>
-              {/* Opsi 1 */}
+            <div className="mode-selector-wrapper">
               <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
                 <input 
                   type="radio" 
@@ -408,7 +467,6 @@ export default function Attendance() {
                 </div>
               </label>
 
-            {/* Opsi 2 */}
               <label style={{ flex: 1, position: 'relative', cursor: isZoomEnabled ? 'pointer' : 'not-allowed', opacity: isZoomEnabled ? 1 : 0.5 }}>
                 <input 
                   type="radio" 
@@ -460,8 +518,8 @@ export default function Attendance() {
 
             {!localStorage.getItem('user_nim') && !currentUser && !isSearching && (
               <form onSubmit={handleSearchNim}>
-                <div className="search-row">
-                  <div className="input-group">
+                <div className="search-form-row">
+                  <div className="input-group" style={{ flex: 1 }}>
                     <label className="input-label">Nomor Induk Mahasiswa (NIM)</label>
                     <div className="input-wrapper">
                       <span className="input-icon"><Search size={16} /></span>
@@ -478,7 +536,7 @@ export default function Attendance() {
                   <button
                     type="submit"
                     className={`btn ${isZoom ? 'btn-info' : 'btn-primary'}`}
-                    style={{ height: '44px', alignSelf: 'flex-end', flexShrink: 0 }}
+                    style={{ height: '44px', flexShrink: 0 }}
                     disabled={isSearching || !searchNim.trim()}
                   >
                     <Search size={16} /> Cari
@@ -572,36 +630,11 @@ export default function Attendance() {
             )}
           </div>
 
-          <style>
-            {`
-              .main-action-container {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-4);
-              }
-
-              @media(max-width: 640px) {
-                .attendance-grid {
-                  display: flex !important;
-                  flex-direction: column;
-                }
-                .camera-panel { order: 2; }
-                .map-panel { order: 1; }
-                
-                /* Mengubah urutan agar Laporan (Report) di atas Kamera pada tampilan HP */
-                .report-section { order: 1; }
-                .camera-map-section { order: 2; }
-                .submit-section { order: 3; }
-              }
-            `}
-          </style>
-
-          {/* ── Action Area Wrapper for Reordering on Mobile ── */}
           <div className="main-action-container">
 
             {/* ── Camera + Map ── */}
             <div className="camera-map-section">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }} className="attendance-grid">
+              <div className="attendance-grid">
                 
                 <div className="card camera-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
@@ -742,7 +775,6 @@ export default function Attendance() {
                   </div>
                 </div>
 
-                {/* Toggle Tidak Ada Laporan (Design Modern) */}
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
                   cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)',
@@ -751,7 +783,7 @@ export default function Attendance() {
                 }} onClick={() => {
                   const newVal = !isNoReport;
                   setIsNoReport(newVal);
-                  if (newVal) setReportText(''); // Kosongkan teks jika diaktifkan
+                  if (newVal) setReportText(''); 
                 }}>
                   <div style={{
                     position: 'relative', width: '40px', height: '22px', flexShrink: 0,
@@ -770,7 +802,6 @@ export default function Attendance() {
                   </span>
                 </div>
 
-                {/* Menampilkan text area hanya jika toggle dimatikan */}
                 {!isNoReport && (
                   <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                     <textarea
@@ -793,7 +824,6 @@ export default function Attendance() {
                       }}
                     />
 
-                    {/* Warning Pesan Terlalu Singkat & Counter KARAKTER */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--fs-xs)' }}>
                       <span style={{ 
                         color: currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS ? '#ef4444' : 'var(--text-tertiary)',
@@ -879,7 +909,9 @@ export default function Attendance() {
                         )}
                         <span className="record-type-badge">{badgeText}</span>
                       </div>
-                      <div style={{ flex: 1 }}>
+
+                      {/* 🔴 PERBAIKAN: Tambahkan minWidth: 0 ke div parent ini agar teks bisa word-break */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex items-center justify-between mb-1">
                           <p style={{ fontWeight: 700, fontSize: 'var(--fs-sm)' }}>{typeDisplay[record.type]}</p>
                           <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', fontFamily: 'monospace', fontWeight: 600 }}>{timeStr} WIB</span>
@@ -889,9 +921,16 @@ export default function Attendance() {
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
                         
-                        {/* Menampilkan Report di History jika ada */}
+                        {/* 🔴 PERBAIKAN: Menambahkan properti CSS wordBreak & overflowWrap di sini */}
                         {record.report && (
-                          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: 'var(--space-1)', fontStyle: 'italic' }}>
+                          <p style={{ 
+                            fontSize: 'var(--fs-xs)', 
+                            color: 'var(--text-secondary)', 
+                            marginTop: 'var(--space-1)', 
+                            fontStyle: 'italic',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere'
+                          }}>
                             "{record.report}"
                           </p>
                         )}
@@ -914,9 +953,9 @@ export default function Attendance() {
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <div className="success-view animate-fade-in" style={{ borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
             <div className="success-icon-ring"
-  style={{ background: isZoom ? 'var(--info-bg)' : 'var(--success-bg)', borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
-  <CheckCircle2 size={48} style={{ color: isZoom ? 'var(--info)' : 'var(--success)' }} />
-</div>
+              style={{ background: isZoom ? 'var(--info-bg)' : 'var(--success-bg)', borderColor: isZoom ? 'var(--info-border)' : 'var(--success-border)' }}>
+              <CheckCircle2 size={48} style={{ color: isZoom ? 'var(--info)' : 'var(--success)' }} />
+            </div>
 
             <div>
               <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, marginBottom: 'var(--space-2)' }}>
@@ -967,7 +1006,7 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* ── OTP Modal untuk Registrasi Ulang Wajah ── */}
+      {/* ── OTP Modal ── */}
       {showOtpModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000,
@@ -1080,5 +1119,3 @@ export default function Attendance() {
     </div>
   );
 }
-
-//update ya
