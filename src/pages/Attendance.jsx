@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   MapPin, Camera, CheckCircle2, XCircle, Loader2,
-  User, Search, LogOut, LogIn, History, Monitor, Building2, FileText
+  User, Search, LogOut, LogIn, History, Monitor, Building2, FileText, AlertCircle
 } from 'lucide-react';
 import { getCurrentLocation, validateLocationDistance, TARGET_COORDINATE } from '../utils/location';
 import { MockApi, API_URL, LOCAL_API_URL } from '../utils/api';
@@ -63,11 +63,11 @@ export default function Attendance() {
   const [reportText, setReportText] = useState('');
   const [isNoReport, setIsNoReport] = useState(false);
   const [showRegisterBtn, setShowRegisterBtn] = useState(false);
-  const MIN_REPORT_CHARS = 100; // 100 Karakter
+  const MIN_REPORT_CHARS = 50; // 100 Karakter
 
   // OTP State
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpStep, setOtpStep] = useState(1); // 1 = Request, 2 = Input/Verify
+  const [otpStep, setOtpStep] = useState(1);
   const [otpInput, setOtpInput] = useState('');
   const [isOtpLoading, setIsOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
@@ -81,7 +81,6 @@ export default function Attendance() {
     let isMounted = true;
 
     const init = async () => {
-      // Cek Status Zoom dari API
       try {
         const zoomRes = await fetch(`https://absensai.vercel.app/api/get_zoom_status?t=${new Date().getTime()}`, {
           cache: 'no-store'
@@ -347,18 +346,12 @@ export default function Attendance() {
       <style>
         {`
           .responsive-container {
-            max-width: 900px;
+            max-width: 768px; /* Lebih kompak & linier */
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: var(--space-6);
+            gap: var(--space-5);
             padding: var(--space-4);
-          }
-          
-          .main-action-container {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-4);
           }
 
           .mode-selector-wrapper {
@@ -376,24 +369,62 @@ export default function Attendance() {
             gap: var(--space-3);
           }
 
-          .attendance-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--space-4);
+          /* Area Laporan Harian */
+          .report-card-modern {
+            border-left: none;
+            box-shadow: none;
+            border: none;
+            background: #ffffff; 
+          }
+          
+          /* Switch Toggle Kustom */
+          .switch-toggle-custom {
+            position: relative;
+            display: inline-block;
+            width: 40px; 
+            height: 24px;
+            flex-shrink: 0;
+            background: #e2e8f0; 
+            border-radius: 12px;
+            transition: background 0.3s ease;
+          }
+          .switch-toggle-custom.active {
+            background: var(--primary); 
+          }
+          .switch-toggle-custom .thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: left 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          }
+          .switch-toggle-custom.active .thumb {
+            left: 18px;
+          }
+
+          /* Textarea Kustom */
+          .textarea-custom {
+            width: 100%;
+            min-height: 100px;
+            padding: var(--space-3);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--primary-subtle);
+            background: #ffffff;
+            font-size: var(--fs-sm);
+            outline: none;
+            resize: vertical;
+            color: var(--text-primary);
+          }
+          .textarea-custom::placeholder {
+            color: var(--text-tertiary);
           }
 
           /* Responsive Breakpoints */
           @media(max-width: 768px) {
-            .attendance-grid {
-              grid-template-columns: 1fr;
-            }
-            .camera-panel { order: 2; }
-            .map-panel { order: 1; }
-            
-            .report-section { order: 1; }
-            .camera-map-section { order: 2; }
-            .submit-section { order: 3; }
-            
             .search-form-row {
               flex-direction: column;
               align-items: stretch;
@@ -405,7 +436,7 @@ export default function Attendance() {
 
           @media(max-width: 480px) {
             .responsive-container {
-              padding: var(--space-2);
+              padding: var(--space-3) var(--space-2);
             }
             .mode-selector-wrapper {
               flex-direction: column;
@@ -417,7 +448,7 @@ export default function Attendance() {
       {/* ── Page Title ── */}
       {viewState === 'active' && (
         <>
-          {/* ── Header & Mode Selector ── */}
+          {/* 1. Header & Pilihan Mode (Lokasi/Meeting) */}
           <div className="card" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
             <div>
               <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, marginBottom: 'var(--space-1)' }}>
@@ -507,7 +538,7 @@ export default function Attendance() {
             </div>
           </div>
 
-          {/* ── Data Pengguna (NIM Otomatis) ── */}
+          {/* 2. Mode Reguler (Data Pengguna / NIM) */}
           <div className="card" style={{ padding: 'var(--space-5)' }}>
             {isSearching && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--text-secondary)' }}>
@@ -604,17 +635,240 @@ export default function Attendance() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* 3. GPS (Peta Lokasi) */}
+          <div className="card map-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
+              <div className="panel-icon panel-icon-info"><MapPin size={16} /></div>
+              <div>
+                <p className="panel-title">Lokasi GPS</p>
+                <p className="panel-subtitle">Peta posisi real-time</p>
+              </div>
+            </div>
+
+            <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', height: '200px', border: '1px solid var(--border-color)' }}>
+              <MapContainer center={[TARGET_COORDINATE.latitude, TARGET_COORDINATE.longitude]} zoom={17} style={{ height: '100%', width: '100%' }} zoomControl={false} dragging={false}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
+                {userCoords && <MapUpdater center={userCoords} />}
+                {userCoords && <Marker position={[userCoords.latitude, userCoords.longitude]} icon={userIcon} zIndexOffset={100}><Popup>Lokasi Anda</Popup></Marker>}
+              </MapContainer>
+            </div>
+
+            {isZoom ? (
+              <div className="alert alert-info" style={{ fontSize: 'var(--fs-xs)' }}>
+                <Monitor size={14} className="alert-icon" />
+                <div>
+                  <p className="alert-title">Mode Meeting Aktif</p>
+                  <p className="alert-body">Lokasi Anda dicatat sebagai metadata. Tidak ada validasi radius.</p>
+                </div>
+              </div>
+            ) : (
+              <div className={`alert ${locStatus === 'success' ? 'alert-success' : locStatus === 'locating' ? 'alert-info' : 'alert-neutral'}`} style={{ fontSize: 'var(--fs-xs)' }}>
+                {locStatus === 'locating'
+                  ? <Loader2 size={14} className="alert-icon" style={{ animation: 'spin 0.7s linear infinite' }} />
+                  : locStatus === 'success'
+                    ? <CheckCircle2 size={14} className="alert-icon" />
+                    : <MapPin size={14} className="alert-icon" />
+                }
+                <div>
+                  <p className="alert-title">{locInfo().text}</p>
+                  {userCoords && (
+                    <p className="alert-body" style={{ fontFamily: 'monospace', marginTop: '2px' }}>
+                      {userCoords.latitude.toFixed(5)}, {userCoords.longitude.toFixed(5)}
+                    </p>
+                  )}
+                  {locStatus !== 'locating' && (
+                    <button onClick={handleRefreshLocation} style={{ fontSize: 'var(--fs-xs)', fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px', padding: 0 }}>
+                      ↻ Refresh GPS
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Laporan Aktivitas Hari Ini */}
+          {isCheckOut && currentUser && (
+            <div className={`card report-card-modern animate-fade-in`} style={{ padding: 'var(--space-5)' }}>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                <div style={{ 
+                  background: 'var(--primary-subtle)', 
+                  padding: '10px', 
+                  borderRadius: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <FileText size={24} style={{ color: 'var(--primary)' }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 'var(--fs-base)', fontWeight: 800 }}>
+                    Laporan Aktivitas Hari Ini
+                  </h3>
+                  <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Ceritakan singkat apa yang Anda kerjakan atau pelajari di lokasi hari ini.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ borderBottom: '1px solid var(--border-color)', marginBottom: 'var(--space-4)' }}></div>
+
+              {/* Opsi Toggle (Toggle di Kiri, Teks di Kanan) */}
+              <div 
+                onClick={() => {
+                  const newVal = !isNoReport;
+                  setIsNoReport(newVal);
+                  if (newVal) setReportText(''); 
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  cursor: 'pointer', padding: '12px 16px',
+                  background: 'var(--surface-2)', border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  transition: 'all 0.2s ease', marginBottom: 'var(--space-4)'
+                }}
+              >
+                {/* Switch Toggle di Kiri */}
+                <div className={`switch-toggle-custom ${isNoReport ? 'active' : ''}`}>
+                  <div className="thumb"></div>
+                </div>
+
+                {/* Teks di Kanan */}
+                <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Tidak ada laporan dari mentor hari ini
+                </span>
+              </div>
+
+              {!isNoReport ? (
+                <div>
+                  <textarea
+                    value={reportText}
+                    onChange={(e) => setReportText(e.target.value)}
+                    className="textarea-custom"
+                    placeholder="Tuliskan aktivitas Anda hari ini di sini"
+                  />
+                  
+                  <div style={{ 
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                    marginTop: 'var(--space-2)', fontSize: 'var(--fs-xs)'
+                  }}>
+                    <span style={{ 
+                      color: currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS ? 'var(--error)' : 'var(--text-secondary)',
+                      fontWeight: 600 
+                    }}>
+                      {currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS ? (
+                        <><AlertCircle size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Terlalu singkat!</>
+                      ) : (
+                        `Minimal ${MIN_REPORT_CHARS} karakter.`
+                      )}
+                    </span>
+                    <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, fontFamily: 'monospace' }}>
+                      {currentCharCount} / {MIN_REPORT_CHARS} Karakter
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ 
+                  background: 'var(--surface-2)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)', 
+                  textAlign: 'center', border: '1px dashed var(--border-color)', color: 'var(--text-secondary)',
+                  fontSize: 'var(--fs-sm)'
+                }}>
+                  Laporan akan dicatat sebagai <strong>"Tidak ada laporan mentor hari ini"</strong>.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 5. Camera (Kamera Absensi) */}
+          <div className="card camera-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
+              <div className="panel-icon panel-icon-primary"><Camera size={16} /></div>
+              <div>
+                <p className="panel-title">Kamera Absensi</p>
+                <p className="panel-subtitle">Verifikasi wajah real-time</p>
+              </div>
+            </div>
+
+            <div className="camera-viewport">
+              {faceStatus === 'loading_models' && (
+                <div style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', zIndex: 20 }}>
+                  <Loader2 size={28} style={{ animation: 'spin 0.7s linear infinite' }} />
+                  <span style={{ fontSize: 'var(--fs-sm)' }}>Memuat model AI...</span>
+                </div>
+              )}
+
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                muted 
+                playsInline 
+                className="camera-video"
+                style={{ display: (faceStatus === 'active' || faceStatus === 'scanning' || faceStatus === 'error') && mediaStream ? 'block' : 'none' }}
+              />
+
+              {faceStatus !== 'loading_models' && (
+                <div className="camera-overlay">
+                  <svg viewBox="0 0 200 250" style={{ width: '100%', height: '100%', opacity: faceStatus === 'scanning' ? 0.5 : 1, transition: 'opacity 0.3s' }}>
+                    <g fill="none" stroke={faceStatus === 'scanning' ? 'var(--primary)' : 'rgba(255,255,255,0.85)'} strokeWidth="4" strokeDasharray="10 7">
+                      <ellipse cx="100" cy="100" rx="60" ry="78" />
+                      <path d="M 32 250 Q 32 200 100 200 Q 168 200 168 250" />
+                    </g>
+                    <g fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeDasharray="10 7">
+                      <ellipse cx="100" cy="100" rx="60" ry="78" />
+                      <path d="M 32 250 Q 32 200 100 200 Q 168 200 168 250" />
+                    </g>
+                    <g stroke="rgba(255,255,255,0.7)" strokeWidth="1.5">
+                      <line x1="100" y1="93" x2="100" y2="107" />
+                      <line x1="93" y1="100" x2="107" y2="100" />
+                    </g>
+                  </svg>
+                </div>
+              )}
+
+              {faceStatus === 'scanning' && <div className="camera-scanning-border" />}
+
+              {faceStatus === 'scanning' && (
+                <div className="camera-toast">
+                  <Loader2 size={13} style={{ animation: 'spin 0.7s linear infinite' }} />
+                  Memverifikasi wajah...
+                </div>
+              )}
+
+              {faceStatus === 'paused' && (
+                <div className="camera-placeholder">
+                  <Search size={40} style={{ opacity: 0.4 }} />
+                  <p>{isDoneForToday ? 'Presensi hari ini sudah selesai.' : 'Menunggu NIM untuk mengaktifkan kamera.'}</p>
+                </div>
+              )}
+            </div>
 
             {faceError && (
-              <div className="alert alert-error" style={{ marginTop: (currentUser || localStorage.getItem('user_nim')) ? 'var(--space-3)' : 0, flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div className="alert alert-error" style={{ 
+                marginTop: '0', 
+                flexDirection: 'column', 
+                alignItems: 'flex-start',
+                border: '1px solid var(--error-border)',
+                animation: 'fadeIn 0.3s ease'
+              }}>
                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                  <XCircle size={15} className="alert-icon" />
-                  <span style={{ fontSize: 'var(--fs-sm)' }}>{faceError}</span>
+                  <XCircle size={15} className="alert-icon" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <span style={{ fontSize: 'var(--fs-sm)', lineHeight: '1.4' }}>{faceError}</span>
                 </div>
+                
                 {showRegisterBtn && currentUser?.nim && (
                   <button 
                     className="btn"
-                    style={{ marginTop: 'var(--space-3)', width: '100%', fontSize: 'var(--fs-xs)', height: '36px', background: 'white', color: 'var(--error)', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-sm)' }}
+                    style={{ 
+                      marginTop: 'var(--space-3)', 
+                      width: '100%', 
+                      fontSize: 'var(--fs-xs)', 
+                      height: '38px', 
+                      background: 'white', 
+                      color: 'var(--error)', 
+                      border: '1px solid var(--error-border)', 
+                      borderRadius: 'var(--radius-sm)',
+                      fontWeight: 700
+                    }}
                     onClick={() => {
                       setShowOtpModal(true);
                       setOtpStep(1);
@@ -622,262 +876,52 @@ export default function Attendance() {
                       setOtpError('');
                     }}
                   >
-                    <Camera size={14} style={{ marginRight: '4px', verticalAlign: 'middle', display: 'inline' }} />
-                    Registrasi Wajah Baru / Berhijab (Menambah Data)
+                    <Camera size={14} style={{ marginRight: '6px', display: 'inline' }} />
+                    Registrasi Wajah Baru / Berhijab
                   </button>
                 )}
               </div>
             )}
           </div>
 
-          <div className="main-action-container">
-
-            {/* ── Camera + Map ── */}
-            <div className="camera-map-section">
-              <div className="attendance-grid">
-                
-                <div className="card camera-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                  <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
-                    <div className="panel-icon panel-icon-primary"><Camera size={16} /></div>
-                    <div>
-                      <p className="panel-title">Kamera Absensi</p>
-                      <p className="panel-subtitle">Verifikasi wajah real-time</p>
-                    </div>
-                  </div>
-
-                  <div className="camera-viewport">
-                    {faceStatus === 'loading_models' && (
-                      <div style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', zIndex: 20 }}>
-                        <Loader2 size={28} style={{ animation: 'spin 0.7s linear infinite' }} />
-                        <span style={{ fontSize: 'var(--fs-sm)' }}>Memuat model AI...</span>
-                      </div>
-                    )}
-
-                    <video ref={videoRef} autoPlay muted playsInline className="camera-video"
-                      style={{ display: (faceStatus === 'active' || faceStatus === 'scanning' || faceStatus === 'error') && mediaStream ? 'block' : 'none' }}
-                    />
-
-                    {faceStatus !== 'loading_models' && (
-                      <div className="camera-overlay">
-                        <svg viewBox="0 0 200 250" style={{ width: '100%', height: '100%', opacity: faceStatus === 'scanning' ? 0.5 : 1, transition: 'opacity 0.3s' }}>
-                          <g fill="none" stroke={faceStatus === 'scanning' ? 'var(--primary)' : 'rgba(255,255,255,0.85)'} strokeWidth="4" strokeDasharray="10 7">
-                            <ellipse cx="100" cy="100" rx="60" ry="78" />
-                            <path d="M 32 250 Q 32 200 100 200 Q 168 200 168 250" />
-                          </g>
-                          <g fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeDasharray="10 7">
-                            <ellipse cx="100" cy="100" rx="60" ry="78" />
-                            <path d="M 32 250 Q 32 200 100 200 Q 168 200 168 250" />
-                          </g>
-                          <g stroke="rgba(255,255,255,0.7)" strokeWidth="1.5">
-                            <line x1="100" y1="93" x2="100" y2="107" />
-                            <line x1="93" y1="100" x2="107" y2="100" />
-                          </g>
-                        </svg>
-                      </div>
-                    )}
-
-                    {faceStatus === 'scanning' && <div className="camera-scanning-border" />}
-
-                    {faceStatus === 'scanning' && (
-                      <div className="camera-toast">
-                        <Loader2 size={13} style={{ animation: 'spin 0.7s linear infinite' }} />
-                        Memverifikasi wajah...
-                      </div>
-                    )}
-
-                    {faceStatus === 'paused' && (
-                      <div className="camera-placeholder">
-                        <Search size={40} style={{ opacity: 0.4 }} />
-                        <p>{isDoneForToday ? 'Presensi hari ini sudah selesai.' : 'Menunggu NIM untuk mengaktifkan kamera.'}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="card map-panel" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                  <div className="panel-header" style={{ paddingBottom: 'var(--space-3)', marginBottom: 0 }}>
-                    <div className="panel-icon panel-icon-info"><MapPin size={16} /></div>
-                    <div>
-                      <p className="panel-title">Lokasi GPS</p>
-                      <p className="panel-subtitle">Peta posisi real-time</p>
-                    </div>
-                  </div>
-
-                  <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', height: '200px', border: '1px solid var(--border-color)' }}>
-                    <MapContainer
-                      center={[TARGET_COORDINATE.latitude, TARGET_COORDINATE.longitude]}
-                      zoom={17}
-                      style={{ height: '100%', width: '100%' }}
-                      zoomControl={false}
-                      dragging={false}
-                    >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
-                      {userCoords && <MapUpdater center={userCoords} />}
-                      {userCoords && (
-                        <Marker position={[userCoords.latitude, userCoords.longitude]} icon={userIcon} zIndexOffset={100}>
-                          <Popup>Lokasi Anda</Popup>
-                        </Marker>
-                      )}
-                    </MapContainer>
-                  </div>
-
-                  {isZoom ? (
-                    <div className="alert alert-info" style={{ fontSize: 'var(--fs-xs)' }}>
-                      <Monitor size={14} className="alert-icon" />
-                      <div>
-                        <p className="alert-title">Mode Meeting Aktif</p>
-                        <p className="alert-body">Lokasi Anda dicatat sebagai metadata. Tidak ada validasi radius.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={`alert ${locStatus === 'success' ? 'alert-success' : locStatus === 'locating' ? 'alert-info' : 'alert-neutral'}`} style={{ fontSize: 'var(--fs-xs)' }}>
-                      {locStatus === 'locating'
-                        ? <Loader2 size={14} className="alert-icon" style={{ animation: 'spin 0.7s linear infinite' }} />
-                        : locStatus === 'success'
-                          ? <CheckCircle2 size={14} className="alert-icon" />
-                          : <MapPin size={14} className="alert-icon" />
-                      }
-                      <div>
-                        <p className="alert-title">{locInfo().text}</p>
-                        {userCoords && (
-                          <p className="alert-body" style={{ fontFamily: 'monospace', marginTop: '2px' }}>
-                            {userCoords.latitude.toFixed(5)}, {userCoords.longitude.toFixed(5)}
-                          </p>
-                        )}
-                        {locStatus !== 'locating' && (
-                          <button onClick={handleRefreshLocation} style={{ fontSize: 'var(--fs-xs)', fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px', padding: 0 }}>
-                            ↻ Refresh GPS
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ── Form Laporan Harian (Muncul Hanya Saat Check-Out) ── */}
-            {isCheckOut && currentUser && (
-              <div className="report-section card animate-fade-in" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                <div className="panel-header" style={{ marginBottom: 'var(--space-2)' }}>
-                  <div className={`panel-icon ${isZoom ? 'panel-icon-info' : 'panel-icon-primary'}`}>
-                    <FileText size={16} />
-                  </div>
-                  <div>
-                    <p className="panel-title" style={{ fontSize: 'var(--fs-base)' }}>
-                      Laporan {isZoom ? 'Hasil Meeting' : 'Aktivitas Hari Ini'}
-                    </p>
-                    <p className="panel-subtitle">
-                      {isZoom
-                        ? 'Tuliskan poin-poin penting atau kesimpulan dari meeting hari ini.'
-                        : 'Ceritakan singkat apa yang Anda kerjakan atau pelajari di lokasi hari ini.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-                  cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)',
-                  padding: 'var(--space-3)', background: 'var(--surface-2)', 
-                  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
-                }} onClick={() => {
-                  const newVal = !isNoReport;
-                  setIsNoReport(newVal);
-                  if (newVal) setReportText(''); 
-                }}>
-                  <div style={{
-                    position: 'relative', width: '40px', height: '22px', flexShrink: 0,
-                    background: isNoReport ? 'var(--primary)' : '#d1d5db',
-                    borderRadius: '11px', transition: 'background 0.3s ease',
-                  }}>
-                    <div style={{
-                      position: 'absolute', top: '2px', left: isNoReport ? '20px' : '2px',
-                      width: '18px', height: '18px', background: 'white',
-                      borderRadius: '50%', transition: 'left 0.3s ease',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                    }} />
-                  </div>
-                  <span style={{ fontWeight: 600, color: isNoReport ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                    Tidak ada laporan dari mentor hari ini
-                  </span>
-                </div>
-
-                {!isNoReport && (
-                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                    <textarea
-                      value={reportText}
-                      onChange={(e) => setReportText(e.target.value)}
-                      placeholder={isZoom 
-                          ? "Tuliskan laporan hasil meeting di sini..." 
-                          : "Tuliskan aktivitas Anda hari ini di sini..."}
-                      style={{
-                        width: '100%',
-                        minHeight: '120px',
-                        padding: 'var(--space-3)',
-                        borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${isZoom ? 'var(--info)' : 'var(--primary)'}`,
-                        background: 'var(--surface-1)',
-                        resize: 'vertical',
-                        fontSize: 'var(--fs-sm)',
-                        fontFamily: 'inherit',
-                        outline: 'none',
-                      }}
-                    />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--fs-xs)' }}>
-                      <span style={{ 
-                        color: currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS ? '#ef4444' : 'var(--text-tertiary)',
-                        fontWeight: 600 
-                      }}>
-                        {currentCharCount > 0 && currentCharCount < MIN_REPORT_CHARS 
-                          ? `⚠️ Terlalu singkat! Minimal ${MIN_REPORT_CHARS} karakter.`
-                          : currentCharCount >= MIN_REPORT_CHARS 
-                            ? '' 
-                            : `Minimal ${MIN_REPORT_CHARS} karakter.`}
-                      </span>
-                      <span style={{ color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                        {currentCharCount} / {MIN_REPORT_CHARS} Karakter
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Submit Button ── */}
-            <div className="submit-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <button
-                className={`btn w-full btn-lg ${isZoom ? 'btn-info' : 'btn-primary'}`}
-                style={{ maxWidth: '480px' }}
-                onClick={handleSubmit}
-                disabled={!isReadyToSubmit || faceStatus === 'scanning'}
-              >
-                {faceStatus === 'scanning' ? (
-                  <><Loader2 size={18} style={{ animation: 'spin 0.7s linear infinite' }} /> Memproses...</>
-                ) : isDoneForToday ? (
-                  <><CheckCircle2 size={18} /> Presensi Selesai Hari Ini</>
-                ) : (
-                  <>{(attendanceType === 'in' || attendanceType === 'meet-in') ? <LogIn size={18} /> : <LogOut size={18} />}
-                    Catat Kehadiran — {typeLabel || '...'}</>
-                )}
-              </button>
-
-              {!isReadyToSubmit && !isDoneForToday && faceStatus !== 'loading_models' && (
-                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                  {!currentUser
-                    ? '⓵ Masukkan NIM terlebih dahulu lalu tekan Cari'
-                    : faceStatus === 'paused'
-                      ? '⓶ Kamera belum aktif. Cari NIM terlebih dahulu.'
-                      : isCheckOut && !isReportValid
-                        ? `⚠️ Harap isi laporan (min. ${MIN_REPORT_CHARS} karakter) atau centang "Tidak ada laporan".`
-                        : 'Kamera sedang memuat...'}
-                </p>
+          {/* 6. Tombol Submit (Catat Kehadiran) */}
+          <div className="submit-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}>
+            <button
+              className={`btn w-full btn-lg ${isZoom ? 'btn-info' : 'btn-primary'}`}
+              style={{ maxWidth: '480px' }}
+              onClick={handleSubmit}
+              disabled={!isReadyToSubmit || faceStatus === 'scanning'}
+            >
+              {faceStatus === 'scanning' ? (
+                <>
+                  <Loader2 size={18} style={{ animation: 'spin 0.7s linear infinite' }} /> Memproses...
+                </>
+              ) : isDoneForToday ? (
+                <>
+                  <CheckCircle2 size={18} /> Presensi Selesai Hari Ini
+                </>
+              ) : (
+                <>
+                  {(attendanceType === 'in' || attendanceType === 'meet-in') ? <LogIn size={18} /> : <LogOut size={18} />}
+                  {" "}Catat Kehadiran — {typeLabel || '...'}
+                </>
               )}
-            </div>
-            
+            </button> 
+
+            {!isReadyToSubmit && !isDoneForToday && faceStatus !== 'loading_models' && (
+              <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                {!currentUser
+                  ? '⓵ Masukkan NIM terlebih dahulu lalu tekan Cari'
+                  : faceStatus === 'paused'
+                    ? '⓶ Kamera belum aktif. Cari NIM terlebih dahulu.'
+                    : isCheckOut && !isReportValid
+                      ? `⚠️ Harap isi laporan harian (min. ${MIN_REPORT_CHARS} karakter) atau klik tidak ada laporan.`
+                      : 'Kamera sedang memuat...'}
+              </p>
+            )}
           </div>
 
-          {/* ── Attendance History ── */}
+          {/* 7. Riwayat Kehadiran Hari Ini (Paling Bawah) */}
           {currentUser && attendanceHistory.length > 0 && (
             <div className="card" style={{ padding: 'var(--space-5)' }}>
               <div className="flex items-center gap-2 mb-4">
@@ -888,7 +932,7 @@ export default function Attendance() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {attendanceHistory.map(record => {
-                 const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { 
+                  const timeStr = new Date(record.timestamp).toLocaleTimeString('id-ID', { 
                     timeZone: 'Asia/Jakarta',
                     hour: '2-digit', 
                     minute: '2-digit',
@@ -910,7 +954,6 @@ export default function Attendance() {
                         <span className="record-type-badge">{badgeText}</span>
                       </div>
 
-                      {/* 🔴 PERBAIKAN: Tambahkan minWidth: 0 ke div parent ini agar teks bisa word-break */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex items-center justify-between mb-1">
                           <p style={{ fontWeight: 700, fontSize: 'var(--fs-sm)' }}>{typeDisplay[record.type]}</p>
@@ -921,7 +964,6 @@ export default function Attendance() {
                           {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}
                         </p>
                         
-                        {/* 🔴 PERBAIKAN: Menambahkan properti CSS wordBreak & overflowWrap di sini */}
                         {record.report && (
                           <p style={{ 
                             fontSize: 'var(--fs-xs)', 
