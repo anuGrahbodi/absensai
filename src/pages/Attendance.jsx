@@ -82,7 +82,7 @@ export default function Attendance() {
 
     const init = async () => {
       try {
-        const zoomRes = await fetch(`https://absensai.vercel.app/api/get_zoom_status?t=${new Date().getTime()}`, {
+        const zoomRes = await fetch(`https://absensai-eight.vercel.app/api/get_zoom_status?t=${new Date().getTime()}`, {
           cache: 'no-store'
         });
         const zoomData = await zoomRes.json();
