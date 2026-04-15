@@ -5,7 +5,7 @@
 
 // Gunakan Environment Variable dari Vite. 
 // Fallback 1: Production (Vercel), Fallback 2: Localhost.
-const API_URL = import.meta.env.VITE_API_URL || 'https://absensai.vercel.app/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://absensai-eight.vercel.app/api';
 // const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const LOCAL_API_URL = 'http://localhost:5000/api';
 
