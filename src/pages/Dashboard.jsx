@@ -83,8 +83,8 @@ export default function Dashboard() {
     };
     
     fetchStats();
-    const intervalId = setInterval(fetchStats, 10000); 
-    return () => clearInterval(intervalId);
+    // const intervalId = setInterval(fetchStats, 10000); 
+    // return () => clearInterval(intervalId);
   }, [location.search]); // Akan dijalankan ulang jika ada perubahan parameter navigasi URL
 
   const handleStartPresence = (e) => {

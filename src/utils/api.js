@@ -2,13 +2,10 @@
  * API Service connecting to the Express & MySQL Backend.
  */
 
-
 // Gunakan Environment Variable dari Vite. 
 // Fallback 1: Production (Vercel), Fallback 2: Localhost.
 const API_URL = import.meta.env.VITE_API_URL || 'https://absensai-eight.vercel.app/api';
-// const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const LOCAL_API_URL = 'http://localhost:5000/api';
-
 
 // Ekspor konstanta agar bisa dipakai secara terpisah di komponen lain jika diperlukan
 export { API_URL, LOCAL_API_URL };
@@ -41,14 +38,12 @@ export const MockApi = {
 
   /**
    * Retrieves all registered user profiles to perform 1:N face matching.
-   * 🚀 Menggunakan ?t=... dan cache: 'no-store' agar selalu dapat data terbaru (Bypass Cache Browser/Vercel).
+   * 🚀 PERBAIKAN: Cache diaktifkan (menghapus cache-buster) untuk menghemat kuota TiDB.
    * @returns {Promise<Array>} Array of user objects
    */
   getAllUsers: async () => {
     try {
-      const response = await fetch(`${API_URL}/users?t=${new Date().getTime()}`, { 
-        cache: 'no-store' 
-      });
+      const response = await fetch(`${API_URL}/users`);
       
       if (!response.ok) throw new Error('Gagal mengambil data dari server');
       
@@ -86,13 +81,12 @@ export const MockApi = {
 
   /**
    * Mengambil JUMLAH TOTAL aktivitas absensi hari ini secara global (untuk statistik)
+   * 🚀 PERBAIKAN: Cache diaktifkan.
    * @returns {Promise<number>} Total attendance count
    */
   getGlobalTodayAttendance: async () => {
     try {
-      const response = await fetch(`${API_URL}/attendance/today?t=${new Date().getTime()}`, { 
-        cache: 'no-store' 
-      });
+      const response = await fetch(`${API_URL}/attendance/today`);
       
       if (!response.ok) throw new Error('Gagal mengambil total presensi global');
       
@@ -106,14 +100,13 @@ export const MockApi = {
   
   /**
    * Gets today's attendance history for a specific NIM.
+   * 🚀 PERBAIKAN: Cache diaktifkan.
    * @param {string} nim 
    * @returns {Promise<Array>} Array of attendance objects for the given user
    */
   getTodayAttendance: async (nim) => {
     try {
-      const response = await fetch(`${API_URL}/attendance/today/${nim}?t=${new Date().getTime()}`, {
-        cache: 'no-store'
-      });
+      const response = await fetch(`${API_URL}/attendance/today/${nim}`);
       
       if (!response.ok) throw new Error('Gagal mengambil data riwayat dari server');
       
